@@ -1,0 +1,340 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Notifications | JobTrack</title>
+
+    <!-- Bootstrap CSS -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+
+    <!-- JobTrack Custom CSS -->
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h4>JobTrack</h4>
+            <small>Maintenance Request Portal</small>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="requester-dashboard.html" class="nav-link">
+                Dashboard
+            </a>
+
+            <a href="my-requests.html" class="nav-link">
+                My Requests
+            </a>
+
+            <a href="create-request.html" class="nav-link">
+                New Request
+            </a>
+
+            <a
+                href="requester-notifications.html"
+                class="nav-link active"
+                aria-current="page"
+            >
+                Notifications
+                <span
+                    id="requesterSidebarUnreadCount"
+                    class="badge bg-danger ms-1 d-none"
+                >0</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <a href="#" class="nav-link" id="logoutButton">
+                Logout
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+        <!-- Topbar -->
+        <header class="topbar">
+            <div>
+                <h5 class="mb-0">Notifications</h5>
+            </div>
+
+            <div class="user-info">
+                <span id="requesterName">Loading...</span>
+                <span class="user-role">Requester</span>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <section class="content">
+            <div class="container-fluid">
+
+                <!-- Page Heading -->
+                <div class="d-flex flex-wrap justify-content-between
+                            align-items-center gap-3 mb-4">
+                    <div>
+                        <h2 class="mb-1">Your Notifications</h2>
+                        <p class="text-muted mb-0">
+                            Follow updates on your maintenance requests
+                            and the progress of your job orders.
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        id="refreshRequesterNotificationsButton"
+                        class="btn btn-outline-primary"
+                    >
+                        Refresh
+                    </button>
+                </div>
+
+                <!-- Alert Messages -->
+                <div
+                    id="requesterNotificationsAlert"
+                    class="alert d-none"
+                    role="alert"
+                    aria-live="polite"
+                ></div>
+
+                <!-- Summary Cards -->
+                <div class="row g-3 mb-4">
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-body">
+                                <div class="text-muted mb-2">
+                                    Unread Notifications
+                                </div>
+
+                                <h2 class="mb-0">
+                                    <span id="requesterUnreadCount">—</span>
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-body">
+                                <div class="text-muted mb-2">
+                                    Notifications Loaded
+                                </div>
+
+                                <h2 class="mb-0">
+                                    <span id="requesterLoadedCount">0</span>
+                                </h2>
+
+                                <small class="text-muted">
+                                    On this page
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-xl-4">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-body d-flex flex-column
+                                        justify-content-center">
+                                <h6 class="mb-2">
+                                    All caught up?
+                                </h6>
+
+                                <p class="text-muted small mb-3">
+                                    Mark notifications as read after
+                                    reviewing your updates.
+                                </p>
+
+                                <button
+                                    type="button"
+                                    id="markAllRequesterNotificationsReadButton"
+                                    class="btn btn-primary"
+                                    disabled
+                                >
+                                    Mark All as Read
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Notifications List -->
+                <div class="card shadow-sm">
+                    <div class="card-body">
+
+                        <!-- List Heading and Filter -->
+                        <div class="d-flex flex-wrap
+                                    justify-content-between
+                                    align-items-center gap-3 mb-4">
+
+                            <div>
+                                <h5 class="card-title mb-1">
+                                    Recent Activity
+                                </h5>
+
+                                <p class="text-muted small mb-0">
+                                    Updates related to your submissions
+                                    and maintenance work.
+                                </p>
+                            </div>
+
+                            <div class="d-flex flex-wrap
+                                        align-items-center gap-2">
+
+                                <label
+                                    for="requesterNotificationReadFilter"
+                                    class="form-label mb-0"
+                                >
+                                    Show:
+                                </label>
+
+                                <select
+                                    id="requesterNotificationReadFilter"
+                                    class="form-select"
+                                    style="width: auto; min-width: 150px;"
+                                >
+                                    <option value="all">
+                                        All Notifications
+                                    </option>
+
+                                    <option value="unread">
+                                        Unread
+                                    </option>
+
+                                    <option value="read">
+                                        Read
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Loading State -->
+                        <div
+                            id="requesterNotificationsLoading"
+                            class="text-muted text-center py-4"
+                            role="status"
+                            aria-live="polite"
+                        >
+                            Loading your notifications...
+                        </div>
+
+                        <!-- Empty State -->
+                        <div
+                            id="requesterNotificationsEmptyState"
+                            class="text-center py-5 d-none"
+                        >
+                            <div class="mb-3">
+                                <span
+                                    class="d-inline-flex align-items-center
+                                           justify-content-center rounded-circle
+                                           bg-light text-secondary"
+                                    style="width: 64px; height: 64px;"
+                                    aria-hidden="true"
+                                >
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="30"
+                                        height="30"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="1.7"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
+                                        <path d="M10 21h4"/>
+                                    </svg>
+                                </span>
+                            </div>
+
+                            <h5 id="requesterNotificationsEmptyTitle">
+                                No notifications yet
+                            </h5>
+
+                            <p
+                                id="requesterNotificationsEmptyMessage"
+                                class="text-muted mb-0"
+                            >
+                                Updates about your maintenance requests
+                                will appear here when available.
+                            </p>
+
+                            <a
+                                href="my-requests.html"
+                                class="btn btn-outline-primary mt-3"
+                            >
+                                View My Requests
+                            </a>
+                        </div>
+
+                        <!-- Notification Items: rendered by JavaScript -->
+                        <div
+                            id="requesterNotificationsList"
+                            class="list-group list-group-flush"
+                            aria-live="polite"
+                        ></div>
+
+                        <!-- Pagination -->
+                        <div
+                            id="requesterNotificationsPagination"
+                            class="d-flex flex-wrap justify-content-between
+                                   align-items-center gap-3 mt-4 pt-3
+                                   border-top"
+                        >
+                            <small
+                                id="requesterNotificationsPaginationInfo"
+                                class="text-muted"
+                            >
+                                No notifications loaded
+                            </small>
+
+                            <div class="d-flex gap-2">
+                                <button
+                                    type="button"
+                                    id="previousRequesterNotificationsPageButton"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    disabled
+                                >
+                                    Previous
+                                </button>
+
+                                <button
+                                    type="button"
+                                    id="nextRequesterNotificationsPageButton"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    disabled
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </section>
+    </main>
+
+    <!-- Bootstrap JavaScript -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+    ></script>
+
+    <!-- Shared JobTrack JavaScript -->
+    <script src="../../js/app.js"></script>
+
+    <!-- Requester Notifications JavaScript -->
+    <script src="../../js/requester-notifications.js"></script>
+</body>
+</html>
