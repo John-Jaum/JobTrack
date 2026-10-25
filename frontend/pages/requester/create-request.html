@@ -27,14 +27,14 @@
         </div>
 
         <nav class="sidebar-nav">
-            <a href="dashboard.html" class="nav-link">Dashboard</a>
+            <a href="requester-dashboard.html" class="nav-link">Dashboard</a>
             <a href="my-requests.html" class="nav-link">My Requests</a>
             <a href="create-request.html" class="nav-link active">New Request</a>
-            <a href="#" class="nav-link">Notifications</a>
+            <a href="requester-notifications.html" class="nav-link">Notifications</a>
         </nav>
 
         <div class="sidebar-footer">
-            <a href="#" class="nav-link">Logout</a>
+            <a href="../../index.html" id="logoutLink" class="nav-link">Logout</a>
         </div>
     </aside>
 
@@ -49,7 +49,7 @@
                 <h5 class="mb-0">New Maintenance Request</h5>
             </div>
             <div class="user-info">
-                <span>John Doe</span>
+                <span id="topbarUserName">Loading...</span>
                 <span class="user-role">Requester</span>
             </div>
         </header>
@@ -70,7 +70,9 @@
                 ================================= -->
                 <div class="card shadow-sm">
                     <div class="card-body">
-                        <form id="maintenanceRequestForm">
+                        <form id="maintenanceRequestForm" enctype="multipart/form-data" novalidate>
+                            <div id="formSuccessMessage" class="alert alert-success d-none" role="status"></div>
+                            <div id="lookupLoadingMessage" class="alert alert-info" role="status">Loading categories and locations...</div>
                             <div
                                 id="formErrorMessage"
                                 class="alert alert-danger d-none"
@@ -98,14 +100,7 @@
                                         class="form-select"
                                         required
                                         >
-                                        <option value="" selected disabled>Select category</option>
-
-                                        <option value="electrical">Electrical</option>
-                                        <option value="plumbing">Plumbing</option>
-                                        <option value="carpentry">Carpentry</option>
-                                        <option value="hvac">HVAC</option>
-                                        <option value="general">General Maintenance</option>
-
+                                        <option value="" selected disabled>Loading categories...</option>
                                     </select>
                                     <div class="invalid-feedback">
                                         Please select a maintenance category.
@@ -125,19 +120,7 @@
                                         class="form-select"
                                         required
                                         >
-                                        <option
-                                            value=""
-                                            selected
-                                            disabled
-                                            >
-                                            Select location
-                                        </option>
-                                        <option value="room-201">Room 201</option>
-                                        <option value="room-204">Room 204</option>
-                                        <option value="faculty-room">Faculty Room</option>
-                                        <option value="computer-lab-1">Computer Lab 1</option>
-                                        <option value="computer-lab-2">Computer Lab 2</option>
-                                        <option value="library">Library</option>
+                                        <option value="" selected disabled>Loading locations...</option>
                                     </select>
                                     <div class="invalid-feedback">
                                         Please select a location.
@@ -157,17 +140,11 @@
                                         class="form-select"
                                         required
                                         >
-                                        <option
-                                            value=""
-                                            selected
-                                            disabled
-                                            >
-                                            Select priority
-                                        </option>
-                                        <option value="low">Low</option>
-                                        <option value="normal">Normal</option>
-                                        <option value="high">High</option>
-                                        <option value="urgent">Urgent</option>
+                                        <option value="" selected disabled>Select priority</option>
+                                        <option value="Low">Low</option>
+                                        <option value="Medium" selected>Medium</option>
+                                        <option value="High">High</option>
+                                        <option value="Urgent">Urgent</option>
                                     </select>
                                     <div class="invalid-feedback">
                                         Please select a priority.
@@ -214,13 +191,13 @@
                                 <input
                                     type="file"
                                     id="attachments"
-                                    name="attachments"
+                                    name="files[]"
                                     class="form-control"
                                     multiple
                                     >
 
                                 <div class="form-text">
-                                    You may attach photos or other supporting files related to the maintenance problem.
+                                    Optional: up to 5 files (JPEG, PNG, WebP, or PDF), maximum 5 MB per file.
                                 </div>
                             </div>
 

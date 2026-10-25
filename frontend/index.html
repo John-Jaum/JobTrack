@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>JobTrack</title>
+    <meta name="theme-color" content="#173b67">
+    <title>Sign In | JobTrack</title>
 
     <!-- Bootstrap CSS -->
     <link
@@ -12,65 +12,118 @@
         rel="stylesheet"
     >
 
-    <!-- JobTrack Custom CSS -->
+    <!-- JobTrack styles -->
     <link rel="stylesheet" href="css/style.css">
 </head>
-
-<body>
-    <!-- ================================
-         Sidebar
-    ================================= -->
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <h4>JobTrack</h4>
-            <small>Facilities Management</small>
-        </div>
-
-        <nav class="sidebar-nav">
-            <a href="../frontend/pages/requester/dashboard.html" class="nav-link active">Dashboard</a>
-            <a href="../frontend/pages/requester/my-requests.html" class="nav-link">My Requests</a>
-            <a href="../frontend/pages/requester/create-request.html" class="nav-link">New Request</a>
-            <a href="#" class="nav-link">Notifications</a>
-        </nav>
-
-        <div class="sidebar-footer">
-            <a href="#" class="nav-link">Logout</a>
-        </div>
-    </aside>
-
-
-    <!-- Main Content -->
-    <main class="main-content">
-
-        <!-- Top Navbar -->
-        <header class="topbar">
-            <div>
-                <h5 class="mb-0">Dashboard</h5>
+<body class="login-page">
+    <main class="login-shell">
+        <section class="login-brand-panel" aria-label="About JobTrack">
+            <div class="login-brand">
+                <div class="login-brand-mark" aria-hidden="true">JT</div>
+                <div>
+                    <div class="login-brand-name">JobTrack</div>
+                    <div class="login-brand-caption">Facilities Management</div>
+                </div>
             </div>
 
-            <div class="user-info">
-                <span>John Doe</span>
-                <span class="user-role">Requester</span>
+            <div class="login-brand-copy">
+                <p class="login-eyebrow">UNIVERSITY FACILITIES</p>
+                <h1>Maintenance requests, managed clearly.</h1>
+                <p>
+                    Sign in to submit and track maintenance requests
+                    or access your assigned JobTrack workspace.
+                </p>
             </div>
-        </header>
 
-
-        <!-- Page Content -->
-        <section class="content">
-            <div class="container-fluid">
-                <h2>Welcome to JobTrack</h2>
-                <p class="text-muted">University Facilities Maintenance and Job Order Management System</p>
-            </div>
+            <p class="login-brand-footer">
+                University Facilities Maintenance and Job Order Management System
+            </p>
         </section>
 
+        <section class="login-form-panel" aria-labelledby="loginHeading">
+            <div class="login-form-wrap">
+                <div class="login-mobile-brand">
+                    <div class="login-brand-mark" aria-hidden="true">JT</div>
+                    <div>
+                        <div class="login-brand-name">JobTrack</div>
+                        <div class="login-brand-caption">Facilities Management</div>
+                    </div>
+                </div>
+
+                <p class="login-eyebrow login-eyebrow-dark">WELCOME BACK</p>
+                <h2 id="loginHeading">Sign in to your account</h2>
+                <p class="login-intro">
+                    Use the email address and password associated with your JobTrack account.
+                </p>
+
+                <div
+                    id="loginMessage"
+                    class="alert alert-danger d-none"
+                    role="alert"
+                    aria-live="polite"
+                ></div>
+
+                <form id="loginForm" novalidate>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email address</label>
+                        <input
+                            type="email"
+                            class="form-control form-control-lg"
+                            id="email"
+                            name="email"
+                            placeholder="you@university.edu"
+                            autocomplete="username"
+                            maxlength="100"
+                            required
+                        >
+                        <div class="invalid-feedback">
+                            Enter a valid email address.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label for="password" class="form-label">Password</label>
+                        </div>
+                        <input
+                            type="password"
+                            class="form-control form-control-lg"
+                            id="password"
+                            name="password"
+                            placeholder="Enter your password"
+                            autocomplete="current-password"
+                            required
+                        >
+                        <div class="invalid-feedback">
+                            Enter your password.
+                        </div>
+                    </div>
+
+                    <button
+                        id="loginButton"
+                        type="submit"
+                        class="btn btn-primary btn-lg w-100 login-submit"
+                    >
+                        <span id="loginButtonText">Sign in</span>
+                        <span
+                            id="loginSpinner"
+                            class="spinner-border spinner-border-sm ms-2 d-none"
+                            aria-hidden="true"
+                        ></span>
+                    </button>
+                </form>
+
+                <p class="login-account-note">
+                    Need an account? Contact your JobTrack administrator.
+                </p>
+
+                <p class="login-security-note">
+                    Access is limited to authorized JobTrack users.
+                </p>
+            </div>
+        </section>
     </main>
 
-
-    <!-- Bootstrap JavaScript -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-    <!-- JobTrack JavaScript -->
-    <script src="js/app.js"></script>
-
+    <script src="js/auth.js"></script>
 </body>
 </html>

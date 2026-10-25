@@ -1,0 +1,569 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Job Orders | JobTrack</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h4>JobTrack</h4>
+            <small>Facilities Management</small>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="facilities-dashboard.html" class="nav-link">
+                Dashboard
+            </a>
+
+            <a href="manage-requests.html" class="nav-link">
+                Manage Requests
+            </a>
+
+            <a
+                href="job-orders.html"
+                class="nav-link active"
+                aria-current="page"
+            >
+                Job Orders
+            </a>
+
+            <a href="facilities-notifications.html" class="nav-link">
+                Notifications
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <a href="#" class="nav-link" id="logoutButton">
+                Logout
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+        <!-- Topbar -->
+        <header class="topbar">
+            <div>
+                <h5 class="mb-0">Job Orders</h5>
+            </div>
+
+            <div class="user-info">
+                <span id="facilitiesOfficerName">
+                    Loading profile...
+                </span>
+                <span class="user-role">Facilities Officer</span>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <section class="content">
+            <div class="container-fluid">
+
+                <!-- Page Heading -->
+                <div class="d-flex flex-wrap
+                            justify-content-between
+                            align-items-center gap-3 mb-4">
+                    <div>
+                        <h1 class="h3 mb-1">Job Order Management</h1>
+                        <p class="text-muted mb-0">
+                            Track approved maintenance work, assignments,
+                            and completion progress.
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        class="btn btn-outline-primary"
+                        id="refreshJobOrdersButton"
+                    >
+                        Refresh Job Orders
+                    </button>
+                </div>
+
+                <!-- Alert -->
+                <div
+                    id="jobOrdersAlert"
+                    class="alert d-none"
+                    role="alert"
+                    aria-live="polite"
+                ></div>
+
+                <!-- Summary Cards -->
+                <div class="row g-3 mb-4">
+
+                    <div class="col-12 col-sm-6 col-xl-3">
+                        <div class="card h-100 shadow-sm">
+                            <div class="card-body">
+                                <p class="text-muted mb-2">
+                                    Total Job Orders
+                                </p>
+                                <h2
+                                    class="display-6 fw-bold"
+                                    id="totalJobOrdersCount"
+                                >
+                                    —
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-xl-3">
+                        <div class="card h-100 shadow-sm">
+                            <div class="card-body">
+                                <p class="text-muted mb-2">
+                                    Awaiting Assignment
+                                </p>
+                                <h2
+                                    class="display-6 fw-bold"
+                                    id="awaitingAssignmentCount"
+                                >
+                                    —
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-xl-3">
+                        <div class="card h-100 shadow-sm">
+                            <div class="card-body">
+                                <p class="text-muted mb-2">
+                                    In Progress
+                                </p>
+                                <h2
+                                    class="display-6 fw-bold"
+                                    id="inProgressCount"
+                                >
+                                    —
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-xl-3">
+                        <div class="card h-100 shadow-sm">
+                            <div class="card-body">
+                                <p class="text-muted mb-2">
+                                    Completed
+                                </p>
+                                <h2
+                                    class="display-6 fw-bold"
+                                    id="completedJobOrdersCount"
+                                >
+                                    —
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Job Order Table -->
+                <section class="card shadow-sm">
+
+                    <div class="card-header bg-white py-3">
+                        <div class="d-flex flex-wrap
+                                    justify-content-between
+                                    align-items-center gap-3">
+
+                            <div>
+                                <h2 class="h5 mb-1">
+                                    Job Order Register
+                                </h2>
+                                <p class="text-muted small mb-0">
+                                    Review job order status, priority,
+                                    location, and assigned technicians.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Filters -->
+                        <form id="jobOrderFiltersForm" class="mt-3">
+                            <div class="row g-3">
+
+                                <div class="col-md-6 col-xl-4">
+                                    <label
+                                        for="jobOrderSearch"
+                                        class="form-label"
+                                    >
+                                        Search
+                                    </label>
+
+                                    <input
+                                        type="search"
+                                        class="form-control"
+                                        id="jobOrderSearch"
+                                        placeholder="Search job orders..."
+                                        aria-label="Search job orders"
+                                    >
+                                </div>
+
+                                <div class="col-md-6 col-xl-3">
+                                    <label
+                                        for="jobOrderStatusFilter"
+                                        class="form-label"
+                                    >
+                                        Status
+                                    </label>
+
+                                    <select
+                                        class="form-select"
+                                        id="jobOrderStatusFilter"
+                                    >
+                                        <option value="">
+                                            All statuses
+                                        </option>
+                                        <option value="Pending">
+                                            Pending
+                                        </option>
+                                        <option value="Approved">
+                                            Approved
+                                        </option>
+                                        <option value="Assigned">
+                                            Assigned
+                                        </option>
+                                        <option value="In Progress">
+                                            In Progress
+                                        </option>
+                                        <option value="On Hold">
+                                            On Hold
+                                        </option>
+                                        <option value="Completed">
+                                            Completed
+                                        </option>
+                                        <option value="Closed">
+                                            Closed
+                                        </option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6 col-xl-3">
+                                    <label
+                                        for="jobOrderPriorityFilter"
+                                        class="form-label"
+                                    >
+                                        Priority
+                                    </label>
+
+                                    <select
+                                        class="form-select"
+                                        id="jobOrderPriorityFilter"
+                                    >
+                                        <option value="">
+                                            All priorities
+                                        </option>
+                                        <option value="Urgent">
+                                            Urgent
+                                        </option>
+                                        <option value="High">
+                                            High
+                                        </option>
+                                        <option value="Medium">
+                                            Medium
+                                        </option>
+                                        <option value="Low">
+                                            Low
+                                        </option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6 col-xl-2
+                                            d-flex align-items-end">
+                                    <button
+                                        type="button"
+                                        class="btn btn-outline-secondary w-100"
+                                        id="clearJobOrderFiltersButton"
+                                    >
+                                        Clear Filters
+                                    </button>
+                                </div>
+
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Loading -->
+                    <div
+                        id="jobOrdersLoading"
+                        class="px-3 py-3 text-muted"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        Loading job orders...
+                    </div>
+
+                    <!-- Table -->
+                    <div class="table-responsive">
+                        <table class="table table-hover
+                                      align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col">Job Order ID</th>
+                                    <th scope="col">Request Reference</th>
+                                    <th scope="col">Location</th>
+                                    <th scope="col">Category</th>
+                                    <th scope="col">Technicians</th>
+                                    <th scope="col">Priority</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Created</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="jobOrdersTableBody">
+                                <tr>
+                                    <td
+                                        colspan="9"
+                                        class="text-center py-4 text-muted"
+                                    >
+                                        Loading job orders...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div
+                        id="jobOrdersEmptyState"
+                        class="text-center text-muted py-4 d-none"
+                    >
+                        <h6>No job orders found</h6>
+                        <p class="mb-0">
+                            Try changing your search or filter criteria.
+                        </p>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="card-footer bg-white">
+                        <div class="d-flex flex-wrap
+                                    justify-content-between
+                                    align-items-center gap-3">
+
+                            <small
+                                class="text-muted"
+                                id="jobOrdersPaginationInfo"
+                            >
+                                No results to display
+                            </small>
+
+                            <div class="btn-group" role="group"
+                                 aria-label="Job order pagination">
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-secondary"
+                                    id="previousJobOrdersPageButton"
+                                    disabled
+                                >
+                                    Previous
+                                </button>
+
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-secondary"
+                                    id="nextJobOrdersPageButton"
+                                    disabled
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </section>
+
+                <p class="text-muted small mt-3">
+                    Job order information and status depend on the
+                    JobTrack API response and the current user's permissions.
+                </p>
+
+            </div>
+        </section>
+    </main>
+
+    <!-- Job Order Details Modal -->
+    <div
+        class="modal fade"
+        id="jobOrderDetailsModal"
+        tabindex="-1"
+        aria-labelledby="jobOrderDetailsModalLabel"
+        aria-hidden="true"
+    >
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5
+                        class="modal-title"
+                        id="jobOrderDetailsModalLabel"
+                    >
+                        Job Order Details
+                    </h5>
+
+                    <button
+                        type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                        aria-label="Close"
+                    ></button>
+                </div>
+
+                <div class="modal-body">
+                    <div
+                        id="jobOrderDetailsLoading"
+                        class="text-muted"
+                    >
+                        Select a job order to view its details.
+                    </div>
+
+                    <div id="jobOrderDetailsContent" class="d-none">
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <p class="text-muted small mb-1">
+                                    Job Order ID
+                                </p>
+                                <p
+                                    class="fw-semibold mb-0"
+                                    id="detailJobOrderId"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <div class="col-md-6">
+                                <p class="text-muted small mb-1">
+                                    Request Reference
+                                </p>
+                                <p
+                                    class="fw-semibold mb-0"
+                                    id="detailRequestReference"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <div class="col-md-6">
+                                <p class="text-muted small mb-1">
+                                    Location
+                                </p>
+                                <p
+                                    class="mb-0"
+                                    id="detailLocation"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <div class="col-md-6">
+                                <p class="text-muted small mb-1">
+                                    Category
+                                </p>
+                                <p
+                                    class="mb-0"
+                                    id="detailCategory"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <div class="col-md-6">
+                                <p class="text-muted small mb-1">
+                                    Priority
+                                </p>
+                                <p
+                                    class="mb-0"
+                                    id="detailPriority"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <div class="col-md-6">
+                                <p class="text-muted small mb-1">
+                                    Status
+                                </p>
+                                <p
+                                    class="mb-0"
+                                    id="detailStatus"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <div class="col-md-6">
+                                <p class="text-muted small mb-1">
+                                    Created
+                                </p>
+                                <p
+                                    class="mb-0"
+                                    id="detailCreatedAt"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <div class="col-md-6">
+                                <p class="text-muted small mb-1">
+                                    Created By
+                                </p>
+                                <p
+                                    class="mb-0"
+                                    id="detailCreatedBy"
+                                >
+                                    —
+                                </p>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <h6>Assigned Technicians</h6>
+                        <ul
+                            id="detailTechniciansList"
+                            class="list-group mb-4"
+                        ></ul>
+
+                        <div
+                            id="jobOrderDetailsError"
+                            class="alert alert-danger d-none"
+                            role="alert"
+                        ></div>
+
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button
+                        type="button"
+                        class="btn btn-outline-secondary"
+                        data-bs-dismiss="modal"
+                    >
+                        Close
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script
+        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
+    </script>
+
+    <script src="../../js/app.js"></script>
+    <script src="../../js/job-orders.js"></script>
+</body>
+</html>

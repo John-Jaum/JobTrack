@@ -1,0 +1,331 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Notifications | JobTrack</title>
+
+    <!-- Bootstrap CSS -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+
+    <!-- JobTrack Custom CSS -->
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h4>JobTrack</h4>
+            <small>Facilities Management</small>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="facilities-dashboard.html" class="nav-link">
+                Dashboard
+            </a>
+
+            <a href="manage-requests.html" class="nav-link">
+                Manage Requests
+            </a>
+
+            <a href="job-orders.html" class="nav-link">
+                Job Orders
+            </a>
+
+            <a href="notifications.html" class="nav-link active"
+               aria-current="page">
+                Notifications
+                <span
+                    id="sidebarUnreadCount"
+                    class="badge bg-danger ms-1 d-none"
+                >0</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <a href="#" class="nav-link" id="logoutButton">
+                Logout
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+        <!-- Topbar -->
+        <header class="topbar">
+            <div>
+                <h5 class="mb-0">Notifications</h5>
+            </div>
+
+            <div class="user-info">
+                <span id="facilitiesOfficerName">Loading...</span>
+                <span class="user-role">Facilities Officer</span>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <section class="content">
+            <div class="container-fluid">
+
+                <!-- Page Heading -->
+                <div class="d-flex flex-wrap justify-content-between
+                            align-items-center gap-3 mb-4">
+                    <div>
+                        <h2 class="mb-1">Notifications</h2>
+                        <p class="text-muted mb-0">
+                            Stay updated on maintenance requests,
+                            job orders, and other activities.
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        id="refreshNotificationsButton"
+                        class="btn btn-outline-primary"
+                    >
+                        Refresh
+                    </button>
+                </div>
+
+                <!-- Alert Messages -->
+                <div
+                    id="notificationsAlert"
+                    class="alert d-none"
+                    role="alert"
+                    aria-live="polite"
+                ></div>
+
+                <!-- Summary Cards -->
+                <div class="row g-3 mb-4">
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-body">
+                                <div class="text-muted mb-2">
+                                    Unread Notifications
+                                </div>
+
+                                <h2 class="mb-0">
+                                    <span id="unreadNotificationsCount">
+                                        —
+                                    </span>
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-body">
+                                <div class="text-muted mb-2">
+                                    Notifications Loaded
+                                </div>
+
+                                <h2 class="mb-0">
+                                    <span id="loadedNotificationsCount">
+                                        0
+                                    </span>
+                                </h2>
+                                <small class="text-muted">
+                                    On this page
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-xl-4">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-body d-flex flex-column
+                                        justify-content-center">
+                                <h6 class="mb-2">
+                                    Keep your inbox up to date
+                                </h6>
+
+                                <p class="text-muted small mb-3">
+                                    Mark all your notifications as read
+                                    when you have reviewed them.
+                                </p>
+
+                                <button
+                                    type="button"
+                                    id="markAllNotificationsReadButton"
+                                    class="btn btn-primary"
+                                    disabled
+                                >
+                                    Mark All as Read
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Notifications List -->
+                <div class="card shadow-sm">
+
+                    <div class="card-body">
+
+                        <!-- Filters and Actions -->
+                        <div class="d-flex flex-wrap
+                                    justify-content-between
+                                    align-items-center gap-3 mb-4">
+
+                            <div>
+                                <h5 class="card-title mb-1">
+                                    Your Activity
+                                </h5>
+                                <p class="text-muted small mb-0">
+                                    Review your latest notifications.
+                                </p>
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2
+                                        align-items-center">
+
+                                <label
+                                    for="notificationReadFilter"
+                                    class="form-label mb-0"
+                                >
+                                    Show:
+                                </label>
+
+                                <select
+                                    id="notificationReadFilter"
+                                    class="form-select"
+                                    style="width: auto; min-width: 150px;"
+                                >
+                                    <option value="all">
+                                        All Notifications
+                                    </option>
+                                    <option value="unread">
+                                        Unread
+                                    </option>
+                                    <option value="read">
+                                        Read
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Loading State -->
+                        <div
+                            id="notificationsLoading"
+                            class="text-muted py-4 text-center"
+                            role="status"
+                            aria-live="polite"
+                        >
+                            Loading notifications...
+                        </div>
+
+                        <!-- Empty State -->
+                        <div
+                            id="notificationsEmptyState"
+                            class="text-center py-5 d-none"
+                        >
+                            <div class="mb-3">
+                                <span
+                                    class="d-inline-flex align-items-center
+                                           justify-content-center rounded-circle
+                                           bg-light text-secondary"
+                                    style="width: 64px; height: 64px;"
+                                    aria-hidden="true"
+                                >
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="30"
+                                        height="30"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="1.7"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
+                                        <path d="M10 21h4"/>
+                                    </svg>
+                                </span>
+                            </div>
+
+                            <h5 id="notificationsEmptyTitle">
+                                No notifications yet
+                            </h5>
+
+                            <p
+                                id="notificationsEmptyMessage"
+                                class="text-muted mb-0"
+                            >
+                                New activity will appear here when available.
+                            </p>
+                        </div>
+
+                        <!-- Notification Items -->
+                        <div
+                            id="notificationsList"
+                            class="list-group list-group-flush"
+                            aria-live="polite"
+                        >
+                            <!-- Populated by notifications.js -->
+                        </div>
+
+                        <!-- Pagination -->
+                        <div
+                            id="notificationsPagination"
+                            class="d-flex flex-wrap justify-content-between
+                                   align-items-center gap-3 mt-4 pt-3
+                                   border-top"
+                        >
+                            <small
+                                id="notificationsPaginationInfo"
+                                class="text-muted"
+                            >
+                                No notifications loaded
+                            </small>
+
+                            <div class="d-flex gap-2">
+                                <button
+                                    type="button"
+                                    id="previousNotificationsPageButton"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    disabled
+                                >
+                                    Previous
+                                </button>
+
+                                <button
+                                    type="button"
+                                    id="nextNotificationsPageButton"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    disabled
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </section>
+    </main>
+
+    <!-- Bootstrap JavaScript -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+    ></script>
+
+    <!-- JobTrack Shared JavaScript -->
+    <script src="../../js/app.js"></script>
+
+    <!-- Notifications Page JavaScript -->
+    <script src="../../js/facilities-notifications.js"></script>
+</body>
+</html>
