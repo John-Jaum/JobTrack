@@ -1,0 +1,317 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Notifications | JobTrack</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+    <link rel="stylesheet" href="../../css/style.css">
+
+    <!--
+    <style>
+        .notification-item {
+            border-bottom: 1px solid #dee2e6;
+            padding: 20px;
+            transition: background-color 0.15s ease;
+        }
+
+        .notification-item:last-child {
+            border-bottom: none;
+        }
+
+        .notification-item.unread {
+            background-color: #f0f6ff;
+            border-left: 4px solid #0d6efd;
+        }
+
+        .notification-message {
+            overflow-wrap: anywhere;
+        }
+
+        .notification-meta {
+            font-size: 13px;
+            color: #6c757d;
+        }
+
+        .summary-card {
+            min-height: 110px;
+        }
+
+        .summary-number {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .filter-control {
+            min-width: 180px;
+        }
+
+        @media (max-width: 767.98px) {
+            .sidebar {
+                position: relative;
+                width: 100%;
+                height: auto;
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .topbar {
+                height: auto;
+                min-height: 70px;
+                padding: 15px 20px;
+            }
+
+            .content {
+                padding: 20px 15px;
+            }
+
+            .sidebar-footer {
+                padding-bottom: 15px;
+            }
+        }
+    </style>
+    -->
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h4>JobTrack</h4>
+            <p>University Facilities</p>
+        </div>
+
+        <nav class="sidebar-nav">
+
+            <a href="inventory-dashboard.html" class="nav-link">
+                <span>Dashboard</span>
+            </a>
+
+            <a href="inventory.html" class="nav-link">
+                <span>Inventory</span>
+            </a>
+
+            <a href="inventory-transactions.html" class="nav-link">
+                <span>Material Transactions</span>
+            </a>
+
+            <a
+                href="inventory-notifications.html"
+                class="nav-link active"
+                aria-current="page"
+            >
+                <span>Notifications</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button
+                id="logoutBtn"
+                type="button"
+                class="btn btn-outline-light w-100"
+            >
+                Log Out
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Topbar -->
+        <header class="topbar">
+            <div>
+                <h5 class="mb-0">Notifications</h5>
+            </div>
+
+            <div class="user-info">
+                <strong id="currentUserName">Inventory Officer</strong>
+                <span class="user-role">Inventory Management</span>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <main class="content">
+            <div class="d-flex flex-wrap justify-content-between
+                        align-items-start gap-3 mb-4">
+                <div>
+                    <h2 class="h3 mb-1">Notifications</h2>
+                    <p class="text-secondary mb-0">
+                        Stay updated on material requests and inventory activities.
+                    </p>
+                </div>
+
+                <button
+                    id="markAllReadBtn"
+                    type="button"
+                    class="btn btn-primary"
+                >
+                    Mark All as Read
+                </button>
+            </div>
+
+            <!-- Feedback -->
+            <div
+                id="alertBox"
+                class="alert d-none"
+                role="alert"
+                aria-live="polite"
+            ></div>
+
+            <!-- Summary Cards -->
+            <div class="row g-3 mb-4">
+                <div class="col-sm-6 col-xl-4">
+                    <div class="card shadow-sm summary-card">
+                        <div class="card-body d-flex
+                                    justify-content-between align-items-center">
+                            <div>
+                                <p class="text-secondary mb-1">
+                                    Unread Notifications
+                                </p>
+                                <h3 id="unreadCount" class="summary-number mb-0">
+                                    —
+                                </h3>
+                            </div>
+
+
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-sm-6 col-xl-4">
+                    <div class="card shadow-sm summary-card">
+                        <div class="card-body d-flex
+                                    justify-content-between align-items-center">
+                            <div>
+                                <p class="text-secondary mb-1">
+                                    Notifications on This Page
+                                </p>
+                                <h3 id="pageCount" class="summary-number mb-0">
+                                    —
+                                </h3>
+                            </div>
+
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notifications Panel -->
+            <section class="card shadow-sm">
+                <div class="card-header bg-white p-3">
+                    <div class="d-flex flex-wrap
+                                justify-content-between align-items-center gap-3">
+                        <div>
+                            <h5 class="mb-1">Recent Notifications</h5>
+                            <small class="text-secondary">
+                                Review updates and mark them as read.
+                            </small>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-2">
+                            <label for="readFilter" class="form-label mb-0">
+                                Filter:
+                            </label>
+
+                            <select
+                                id="readFilter"
+                                class="form-select filter-control"
+                            >
+                                <option value="all">All Notifications</option>
+                                <option value="unread">Unread</option>
+                                <option value="read">Read</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loading -->
+                <div id="loadingState" class="text-center py-5">
+                    <div
+                        class="spinner-border spinner-border-sm text-primary"
+                        role="status"
+                    >
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-secondary mt-2 mb-0">
+                        Loading notifications...
+                    </p>
+                </div>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="text-center py-5 d-none">
+                    <h6>No Notifications Found</h6>
+                    <p class="text-secondary mb-0">
+                        There are no notifications matching this filter.
+                    </p>
+                </div>
+
+                <!-- Notification List -->
+                <div id="notificationList"></div>
+
+                <!-- Error State -->
+                <div id="errorState" class="text-center py-5 d-none">
+                    <h6>Unable to Load Notifications</h6>
+                    <p class="text-secondary">
+                        Please check your connection and try again.
+                    </p>
+                    <button
+                        id="retryBtn"
+                        type="button"
+                        class="btn btn-outline-primary"
+                    >
+                        Retry
+                    </button>
+                </div>
+
+                <!-- Pagination -->
+                <div class="card-footer bg-white p-3">
+                    <div class="d-flex flex-wrap
+                                justify-content-between align-items-center gap-3">
+                        <small
+                            id="paginationInfo"
+                            class="text-secondary"
+                        >
+                            Page 1 of 1
+                        </small>
+
+                        <div class="d-flex gap-2">
+                            <button
+                                id="previousBtn"
+                                type="button"
+                                class="btn btn-outline-secondary btn-sm"
+                            >
+                                Previous
+                            </button>
+
+                            <button
+                                id="nextBtn"
+                                type="button"
+                                class="btn btn-outline-primary btn-sm"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <p class="text-secondary small mt-3 mb-0">
+                JobTrack Inventory Management
+            </p>
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../../js/app.js"></script>
+    <script src="../../js/inventory-notifications.js"></script>
+</body>
+</html>

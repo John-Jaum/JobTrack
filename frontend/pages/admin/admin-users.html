@@ -1,0 +1,325 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management | JobTrack</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+          rel="stylesheet">
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+<div class="app-container">
+
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h4>JobTrack</h4>
+            <p>University Facilities</p>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="admin-dashboard.html" class="nav-link">
+                <span>Dashboard</span>
+            </a>
+            <a href="users.html" class="nav-link active" aria-current="page">
+                <span>User Management</span>
+            </a>
+            <a href="reports.html" class="nav-link">
+                <span>Reports</span>
+            </a>
+            <a href="audit-trail.html" class="nav-link">
+                <span>Audit Trail</span>
+            </a>
+            <a href="notifications.html" class="nav-link">
+                <span>Notifications</span>
+                <span id="adminSidebarUnreadCount"
+                      class="badge bg-danger ms-auto d-none">0</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button type="button" id="logoutButton"
+                    class="btn btn-outline-secondary btn-sm w-100 mt-3">
+                Log Out
+            </button>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header class="topbar">
+            <div>
+                <h5 class="mb-1">User Management</h5>
+                <small class="text-muted">
+                    Manage JobTrack accounts, roles, and account status.
+                </small>
+            </div>
+            <div class="user-info text-end">
+                <strong id="adminTopbarUserName">Administrator</strong>
+                <span class="user-role">Administrator</span>
+            </div>
+        </header>
+
+        <section class="content">
+
+            <div id="usersAlert" class="alert d-none"
+                 role="alert" aria-live="polite"></div>
+
+            <section class="mb-4">
+                <div class="d-flex flex-wrap justify-content-between
+                            align-items-center gap-3">
+                    <div>
+                        <h3 class="mb-1">User Accounts</h3>
+                        <p class="text-muted mb-0">
+                            Create accounts, update user details, and manage access.
+                        </p>
+                    </div>
+                    <button id="createUserButton" class="btn btn-primary"
+                            type="button">
+                        + Create User
+                    </button>
+                </div>
+            </section>
+
+            <!-- Summary -->
+            <section class="row g-3 mb-4">
+                <div class="col-12 col-sm-6 col-xl-4">
+                    <article class="card h-100">
+                        <div class="card-body">
+                            <p class="text-muted mb-2">Total Users</p>
+                            <h3 id="totalUsers" class="mb-0">—</h3>
+                        </div>
+                    </article>
+                </div>
+                <div class="col-12 col-sm-6 col-xl-4">
+                    <article class="card h-100">
+                        <div class="card-body">
+                            <p class="text-muted mb-2">Active Users on This Page</p>
+                            <h3 id="activeUsers" class="mb-0">—</h3>
+                        </div>
+                    </article>
+                </div>
+                <div class="col-12 col-sm-6 col-xl-4">
+                    <article class="card h-100">
+                        <div class="card-body">
+                            <p class="text-muted mb-2">Inactive Users on This Page</p>
+                            <h3 id="inactiveUsers" class="mb-0">—</h3>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- Filters -->
+            <section class="card mb-4">
+                <div class="card-body">
+                    <h5 class="mb-3">Search and Filter</h5>
+
+                    <form id="userFilterForm" class="row g-3">
+                        <div class="col-12 col-lg-4">
+                            <label for="userSearch" class="form-label">
+                                Search users
+                            </label>
+                            <input id="userSearch" type="search"
+                                   class="form-control"
+                                   placeholder="Name or email">
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-lg-3">
+                            <label for="roleFilter" class="form-label">Role</label>
+                            <select id="roleFilter" class="form-select">
+                                <option value="">All roles</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-lg-3">
+                            <label for="statusFilter" class="form-label">
+                                Account status
+                            </label>
+                            <select id="statusFilter" class="form-select">
+                                <option value="">All statuses</option>
+                                <option value="true">Active</option>
+                                <option value="false">Inactive</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-lg-2 d-flex align-items-end gap-2">
+                            <button type="submit"
+                                    class="btn btn-primary flex-grow-1">
+                                Apply
+                            </button>
+                            <button type="button" id="resetFiltersButton"
+                                    class="btn btn-outline-secondary">
+                                Reset
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- User Table -->
+            <section class="card">
+                <div class="card-header bg-white py-3">
+                    <div class="d-flex flex-wrap justify-content-between
+                                align-items-center gap-2">
+                        <h5 class="mb-0">Registered Users</h5>
+                        <button type="button" id="refreshUsersButton"
+                                class="btn btn-outline-primary btn-sm">
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <div id="usersLoading" class="text-center text-muted p-4"
+                     role="status">
+                    Loading user accounts...
+                </div>
+
+                <div id="usersEmpty" class="text-center p-5 d-none">
+                    <h5>No users found</h5>
+                    <p class="text-muted mb-0">
+                        Try changing your search or filters.
+                    </p>
+                </div>
+
+                <div id="usersTableContainer" class="table-responsive d-none">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                        <tr>
+                            <th scope="col">User</th>
+                            <th scope="col">Role</th>
+                            <th scope="col">Contact</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Date Created</th>
+                            <th scope="col" class="text-end">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody id="usersTableBody"></tbody>
+                    </table>
+                </div>
+
+                <div id="usersError" class="text-center p-4 d-none">
+                    <p class="text-danger">Unable to load user accounts.</p>
+                    <button id="retryUsersButton"
+                            class="btn btn-outline-primary btn-sm">
+                        Try Again
+                    </button>
+                </div>
+
+                <div class="card-footer bg-white">
+                    <div class="d-flex flex-wrap justify-content-between
+                                align-items-center gap-2">
+                        <small id="usersPaginationInfo" class="text-muted">
+                            Page 1
+                        </small>
+                        <div class="d-flex gap-2">
+                            <button id="previousUsersPage"
+                                    class="btn btn-outline-secondary btn-sm">
+                                Previous
+                            </button>
+                            <button id="nextUsersPage"
+                                    class="btn btn-outline-primary btn-sm">
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </section>
+    </main>
+</div>
+
+<!-- Create / Edit User Modal -->
+<div class="modal fade" id="userModal" tabindex="-1"
+     aria-labelledby="userModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <form id="userForm">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="userModalTitle">Create User</h5>
+                    <button type="button" class="btn-close"
+                            data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div id="userFormAlert" class="alert d-none"
+                         role="alert" aria-live="polite"></div>
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label for="fullName" class="form-label">
+                                Full Name *
+                            </label>
+                            <input id="fullName" name="full_name"
+                                   class="form-control" maxlength="100"
+                                   required>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="email" class="form-label">Email *</label>
+                            <input id="email" name="email" type="email"
+                                   class="form-control" maxlength="100" required>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="phoneNumber" class="form-label">
+                                Phone Number
+                            </label>
+                            <input id="phoneNumber" name="phone_number"
+                                   class="form-control" maxlength="20">
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="userRole" class="form-label">Role *</label>
+                            <select id="userRole" name="role_id"
+                                    class="form-select" required>
+                                <option value="">Select a role</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="password" class="form-label">
+                                Password <span id="passwordRequired">*</span>
+                            </label>
+                            <input id="password" name="password" type="password"
+                                   class="form-control" minlength="8"
+                                   autocomplete="new-password">
+                            <small class="text-muted">
+                                For editing, leave blank to keep the existing password.
+                                Passwords must be at least 8 characters when provided.
+                            </small>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input id="isActive" name="is_active"
+                                       type="checkbox" class="form-check-input"
+                                       checked>
+                                <label for="isActive" class="form-check-label">
+                                    Account is active
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary"
+                            data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+                    <button id="saveUserButton" type="submit"
+                            class="btn btn-primary">
+                        Save User
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../../js/app.js"></script>
+<script src="../../js/admin-users.js"></script>
+</body>
+</html>

@@ -1,0 +1,314 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | JobTrack</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+    <div class="app-container">
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h4>JobTrack</h4>
+                <p>University Facilities</p>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="admin-dashboard.html" class="nav-link active"
+                   aria-current="page">
+                    <span>Dashboard</span>
+                </a>
+
+                <a href="users.html" class="nav-link">
+                    <span>User Management</span>
+                </a>
+
+                <a href="reports.html" class="nav-link">
+                    <span>Reports</span>
+                </a>
+
+                <a href="audit-trail.html" class="nav-link">
+                    <span>Audit Trail</span>
+                </a>
+
+                <a href="notifications.html" class="nav-link">
+                    <span>Notifications</span>
+                    <span
+                        id="adminSidebarUnreadCount"
+                        class="badge bg-danger ms-auto d-none"
+                    >0</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button
+                    type="button"
+                    id="logoutButton"
+                    class="btn btn-outline-secondary btn-sm w-100 mt-3"
+                >
+                    Log Out
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <!-- Topbar -->
+            <header class="topbar">
+                <div>
+                    <h5 class="mb-1">Admin Dashboard</h5>
+                    <small class="text-muted">
+                        Monitor JobTrack and access administrative functions.
+                    </small>
+                </div>
+
+                <div class="user-info text-end">
+                    <strong id="adminTopbarUserName">Administrator</strong>
+                    <span class="user-role">Administrator</span>
+                </div>
+            </header>
+
+            <section class="content">
+
+                <!-- Alerts -->
+                <div
+                    id="adminDashboardAlert"
+                    class="alert d-none"
+                    role="alert"
+                    aria-live="polite"
+                ></div>
+
+                <!-- Welcome Section -->
+                <section class="mb-4">
+                    <h3>
+                        Welcome, <span id="adminWelcomeName">Admin</span>!
+                    </h3>
+                    <p class="text-muted mb-0">
+                        Here's your administrative workspace.
+                    </p>
+                </section>
+
+                <!-- System Overview -->
+                <section class="mb-4"
+                         aria-labelledby="adminSummaryHeading">
+
+                    <div class="d-flex justify-content-between
+                                align-items-center flex-wrap gap-2 mb-3">
+                        <div>
+                            <h4 id="adminSummaryHeading" class="mb-1">
+                                System Overview
+                            </h4>
+                            <p class="text-muted mb-0">
+                                Key figures will appear when the corresponding
+                                dashboard data is available.
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            id="refreshAdminDashboardButton"
+                            class="btn btn-outline-primary btn-sm"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+
+                    <div class="row g-3">
+
+                        <div class="col-12 col-sm-6 col-xl-3">
+                            <article class="card h-100">
+                                <div class="card-body">
+                                    <p class="text-muted mb-2">
+                                        Registered Users
+                                    </p>
+                                    <h3 id="adminTotalUsers" class="mb-2">—</h3>
+                                    <small class="text-muted">
+                                        Awaiting user summary endpoint
+                                    </small>
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-xl-3">
+                            <article class="card h-100">
+                                <div class="card-body">
+                                    <p class="text-muted mb-2">
+                                        Job Orders
+                                    </p>
+                                    <h3 id="adminTotalJobOrders" class="mb-2">—</h3>
+                                    <small class="text-muted">
+                                        Awaiting system summary data
+                                    </small>
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-xl-3">
+                            <article class="card h-100">
+                                <div class="card-body">
+                                    <p class="text-muted mb-2">
+                                        Inventory Materials
+                                    </p>
+                                    <h3 id="adminTotalMaterials" class="mb-2">—</h3>
+                                    <small class="text-muted">
+                                        Awaiting dashboard integration
+                                    </small>
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-xl-3">
+                            <article class="card h-100">
+                                <div class="card-body">
+                                    <p class="text-muted mb-2">
+                                        Unread Notifications
+                                    </p>
+                                    <h3 id="adminUnreadNotifications" class="mb-2">—</h3>
+                                    <small class="text-muted">
+                                        Notification summary
+                                    </small>
+                                </div>
+                            </article>
+                        </div>
+
+                    </div>
+                </section>
+
+                <!-- Administrative Actions -->
+                <section class="mb-4"
+                         aria-labelledby="adminActionsHeading">
+
+                    <h4 id="adminActionsHeading" class="mb-3">
+                        Administrative Actions
+                    </h4>
+
+                    <div class="row g-3">
+
+                        <div class="col-12 col-md-4">
+                            <a href="users.html"
+                               class="card h-100 text-decoration-none">
+                                <div class="card-body">
+                                    <h5 class="card-title">User Management</h5>
+                                    <p class="card-text text-muted mb-0">
+                                        View system users and manage accounts
+                                        according to assigned permissions.
+                                    </p>
+                                </div>
+                            </a>
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <a href="reports.html"
+                               class="card h-100 text-decoration-none">
+                                <div class="card-body">
+                                    <h5 class="card-title">System Reports</h5>
+                                    <p class="card-text text-muted mb-0">
+                                        Review operational summaries and
+                                        available system reports.
+                                    </p>
+                                </div>
+                            </a>
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <a href="audit-trail.html"
+                               class="card h-100 text-decoration-none">
+                                <div class="card-body">
+                                    <h5 class="card-title">Audit Trail</h5>
+                                    <p class="card-text text-muted mb-0">
+                                        Review recorded system activity when
+                                        audit records are available.
+                                    </p>
+                                </div>
+                            </a>
+                        </div>
+
+                    </div>
+                </section>
+
+                <!-- System Activity -->
+                <section aria-labelledby="adminActivityHeading">
+
+                    <div class="d-flex justify-content-between
+                                align-items-center flex-wrap gap-2 mb-3">
+                        <div>
+                            <h4 id="adminActivityHeading" class="mb-1">
+                                Recent System Activity
+                            </h4>
+                            <p class="text-muted mb-0">
+                                Latest administrative and operational events.
+                            </p>
+                        </div>
+
+                        <a href="audit-trail.html"
+                           class="btn btn-outline-primary btn-sm">
+                            View Audit Trail
+                        </a>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body">
+
+                            <div
+                                id="adminActivityLoading"
+                                class="text-muted"
+                                role="status"
+                            >
+                                System activity will appear here when a
+                                suitable activity or audit endpoint is available.
+                            </div>
+
+                            <div
+                                id="adminActivityEmptyState"
+                                class="text-center py-4 d-none"
+                            >
+                                <h5>No recent activity</h5>
+                                <p class="text-muted mb-0">
+                                    There are no activity records to display.
+                                </p>
+                            </div>
+
+                            <div
+                                id="adminActivityContainer"
+                                class="table-responsive d-none"
+                            >
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Date</th>
+                                            <th scope="col">User</th>
+                                            <th scope="col">Activity</th>
+                                            <th scope="col">Module</th>
+                                            <th scope="col">Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="adminActivityTableBody">
+                                    </tbody>
+                                </table>
+                            </div>
+
+                        </div>
+                    </div>
+                </section>
+
+            </section>
+        </main>
+    </div>
+
+    <script
+        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+    ></script>
+    <script src="../../js/app.js"></script>
+    <script src="../../js/admin-dashboard.js"></script>
+</body>
+</html>
