@@ -1,0 +1,422 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Material Transactions | JobTrack</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h4>JobTrack</h4>
+                <p>University Facilities</p>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="inventory-dashboard.html" class="nav-link">
+                    <span>Dashboard</span>
+                </a>
+
+                <a href="inventory.html" class="nav-link">
+                    <span>Inventory</span>
+                </a>
+
+                <a href="inventory-transactions.html" class="nav-link active"
+                   aria-current="page">
+                    <span>Material Transactions</span>
+                </a>
+
+                <a href="inventory-notifications.html" class="nav-link">
+                    <span>Notifications</span>
+                    <span
+                        id="inventorySidebarUnreadCount"
+                        class="badge bg-danger ms-auto d-none"
+                    >0</span>
+                </a>
+            </nav>
+            <!-- Sidebar
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <strong id="inventorySidebarUserName">
+                        Inventory Staff
+                    </strong>
+                    <span class="user-role">Inventory Staff</span>
+                </div>
+                -->
+                <button
+                    type="button"
+                    id="logoutButton"
+                    class="btn btn-outline-secondary btn-sm w-100 mt-3"
+                >
+                    Log Out
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <h5 class="mb-1">Material Transactions</h5>
+                    <small class="text-muted">Review and process material requests.</small>
+                </div>
+
+                <div class="user-info text-end">
+                    <strong id="inventoryTopbarUserName">
+                        Inventory Staff
+                    </strong>
+                    <span class="user-role">Inventory Staff</span>
+                </div>
+            </header>
+
+            <section class="content">
+                <div
+                    id="materialRequestsAlert"
+                    class="alert d-none"
+                    role="alert"
+                    aria-live="polite"
+                ></div>
+
+                <div class="alert alert-info" role="note">
+                    <strong>About this page:</strong>
+                    This page lists material requests. The API contract
+                    does not currently provide a global stock transaction
+                    history endpoint.
+                </div>
+
+                <!-- Summary cards -->
+                <section class="mb-4">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <p class="text-muted mb-2">
+                                        Requests on This Page
+                                    </p>
+                                    <h3 id="requestPageTotal">—</h3>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <p class="text-muted mb-2">
+                                        Pending on This Page
+                                    </p>
+                                    <h3 id="requestPagePending">—</h3>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <p class="text-muted mb-2">
+                                        Fulfilled on This Page
+                                    </p>
+                                    <h3 id="requestPageFulfilled">—</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Filters -->
+                <section class="card mb-4">
+                    <div class="card-body">
+                        <h4 class="mb-3">Material Requests</h4>
+
+                        <form id="materialRequestFilterForm">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-12 col-md-5">
+                                    <label
+                                        for="materialRequestSearchInput"
+                                        class="form-label"
+                                    >
+                                        Search current page
+                                    </label>
+                                    <input
+                                        type="search"
+                                        id="materialRequestSearchInput"
+                                        class="form-control"
+                                        placeholder="Material or requester name"
+                                    >
+                                </div>
+
+                                <div class="col-12 col-md-4">
+                                    <label
+                                        for="materialRequestStatusFilter"
+                                        class="form-label"
+                                    >
+                                        Status
+                                    </label>
+                                    <select
+                                        id="materialRequestStatusFilter"
+                                        class="form-select"
+                                    >
+                                        <option value="all">All statuses</option>
+                                        <option value="Pending">Pending</option>
+                                        <option value="Fulfilled">Fulfilled</option>
+                                        <option value="Rejected">Rejected</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-12 col-md-3">
+                                    <div class="d-flex gap-2">
+                                        <button
+                                            type="submit"
+                                            class="btn btn-primary flex-fill"
+                                        >
+                                            Filter
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            id="resetMaterialRequestFiltersButton"
+                                            class="btn btn-outline-secondary"
+                                        >
+                                            Reset
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Requests table -->
+                <section class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between
+                                    align-items-center flex-wrap gap-2 mb-3">
+                            <h5 class="mb-0">Request Records</h5>
+
+                            <label class="d-flex align-items-center gap-2"
+                                   for="materialRequestPerPage">
+                                <span class="text-muted small">Rows</span>
+                                <select
+                                    id="materialRequestPerPage"
+                                    class="form-select form-select-sm"
+                                    style="width: auto;"
+                                >
+                                    <option value="10">10</option>
+                                    <option value="20">20</option>
+                                    <option value="50">50</option>
+                                </select>
+                            </label>
+                        </div>
+
+                        <div
+                            id="materialRequestsLoading"
+                            class="text-center text-muted py-4"
+                            role="status"
+                        >
+                            Loading material requests...
+                        </div>
+
+                        <div
+                            id="materialRequestsEmptyState"
+                            class="text-center py-5 d-none"
+                        >
+                            <h5>No material requests found</h5>
+                            <p class="text-muted mb-0">
+                                There are no requests matching your filters.
+                            </p>
+                        </div>
+
+                        <div
+                            id="materialRequestsTableContainer"
+                            class="table-responsive d-none"
+                        >
+                            <table class="table table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Request ID</th>
+                                        <th scope="col">Material</th>
+                                        <th scope="col">Quantity</th>
+                                        <th scope="col">Requested By</th>
+                                        <th scope="col">Requested At</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="materialRequestsTableBody"></tbody>
+                            </table>
+                        </div>
+
+                        <div class="d-flex justify-content-between
+                                    align-items-center flex-wrap gap-2 mt-3">
+                            <small
+                                id="materialRequestPaginationInfo"
+                                class="text-muted"
+                            >
+                                No records loaded
+                            </small>
+
+                            <div class="d-flex gap-2">
+                                <button
+                                    type="button"
+                                    id="previousMaterialRequestPageButton"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    disabled
+                                >
+                                    Previous
+                                </button>
+
+                                <button
+                                    type="button"
+                                    id="nextMaterialRequestPageButton"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    disabled
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </section>
+        </main>
+    </div>
+
+    <!-- Request details modal -->
+    <div
+        class="modal fade"
+        id="materialRequestDetailsModal"
+        tabindex="-1"
+        aria-labelledby="materialRequestDetailsTitle"
+        aria-hidden="true"
+    >
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="materialRequestDetailsTitle">
+                        Material Request Details
+                    </h5>
+                    <button
+                        type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                        aria-label="Close"
+                    ></button>
+                </div>
+
+                <div class="modal-body">
+                    <div
+                        id="materialRequestDetailsLoading"
+                        class="text-muted d-none"
+                        role="status"
+                    >
+                        Loading request details...
+                    </div>
+
+                    <dl class="row mb-0">
+                        <dt class="col-5">Request ID</dt>
+                        <dd class="col-7" id="detailRequestId">—</dd>
+
+                        <dt class="col-5">Material</dt>
+                        <dd class="col-7" id="detailMaterialName">—</dd>
+
+                        <dt class="col-5">SKU</dt>
+                        <dd class="col-7" id="detailMaterialSku">—</dd>
+
+                        <dt class="col-5">Quantity</dt>
+                        <dd class="col-7" id="detailRequestQuantity">—</dd>
+
+                        <dt class="col-5">Requested By</dt>
+                        <dd class="col-7" id="detailRequestedBy">—</dd>
+
+                        <dt class="col-5">Requested At</dt>
+                        <dd class="col-7" id="detailRequestedAt">—</dd>
+
+                        <dt class="col-5">Status</dt>
+                        <dd class="col-7" id="detailRequestStatus">—</dd>
+
+                        <dt class="col-5">Fulfilled By</dt>
+                        <dd class="col-7" id="detailFulfilledBy">—</dd>
+
+                        <dt class="col-5">Fulfilled At</dt>
+                        <dd class="col-7" id="detailFulfilledAt">—</dd>
+                    </dl>
+                </div>
+
+                <div class="modal-footer">
+                    <button
+                        type="button"
+                        class="btn btn-outline-secondary"
+                        data-bs-dismiss="modal"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm request action -->
+    <div
+        class="modal fade"
+        id="confirmMaterialRequestActionModal"
+        tabindex="-1"
+        aria-labelledby="confirmMaterialRequestActionTitle"
+        aria-hidden="true"
+    >
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5
+                        class="modal-title"
+                        id="confirmMaterialRequestActionTitle"
+                    >
+                        Confirm Request Action
+                    </h5>
+                    <button
+                        type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                        aria-label="Close"
+                    ></button>
+                </div>
+
+                <div class="modal-body">
+                    <p id="confirmMaterialRequestActionMessage" class="mb-0">
+                        Are you sure you want to continue?
+                    </p>
+                </div>
+
+                <div class="modal-footer">
+                    <button
+                        type="button"
+                        class="btn btn-outline-secondary"
+                        data-bs-dismiss="modal"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="button"
+                        id="confirmMaterialRequestActionButton"
+                        class="btn btn-primary"
+                    >
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script
+        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+    ></script>
+    <script src="../../js/app.js"></script>
+    <script src="../../js/inventory-transactions.js"></script>
+</body>
+</html>

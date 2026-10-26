@@ -1,0 +1,248 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifications | JobTrack</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h4>JobTrack</h4>
+                <p class="mb-0">Facilities Maintenance</p>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="technician-dashboard.html" class="nav-link">
+                    <span class="me-2">▦</span> Dashboard
+                </a>
+
+                <a href="my-job-orders.html" class="nav-link">
+                    <span class="me-2">▤</span> My Job Orders
+                </a>
+
+                <a href="notifications.html" class="nav-link active">
+                    <span class="me-2">♧</span> Notifications
+                    <span
+                        id="technicianSidebarUnreadCount"
+                        class="badge bg-danger ms-auto d-none"
+                    >0</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button id="logoutButton"
+                        class="btn btn-outline-light w-100"
+                        type="button">
+                    Log Out
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <h5 class="mb-1">Notifications</h5>
+                    <small class="text-muted">
+                        Updates about your assignments and maintenance jobs
+                    </small>
+                </div>
+
+                <div class="user-info text-end">
+                    <div id="technicianName" class="fw-semibold">
+                        Loading profile...
+                    </div>
+                    <div class="user-role text-muted">Technician</div>
+                </div>
+            </header>
+
+            <section class="content container-fluid">
+                <div
+                    id="technicianNotificationsAlert"
+                    class="alert d-none"
+                    role="alert"
+                    aria-live="polite"
+                ></div>
+
+                <!-- Page heading and actions -->
+                <div class="d-flex justify-content-between align-items-center
+                            flex-wrap gap-2 mb-4">
+                    <div>
+                        <h4 class="mb-1">Your Notifications</h4>
+                        <p class="text-muted mb-0">
+                            Stay updated on job assignments and status changes.
+                        </p>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-2">
+                        <button
+                            id="refreshTechnicianNotificationsButton"
+                            class="btn btn-outline-primary"
+                            type="button"
+                        >
+                            Refresh
+                        </button>
+
+                        <button
+                            id="markAllTechnicianNotificationsReadButton"
+                            class="btn btn-primary"
+                            type="button"
+                        >
+                            Mark All as Read
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Summary cards -->
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-md-6">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-body">
+                                <p class="text-muted mb-2">
+                                    Unread Notifications
+                                </p>
+                                <h3 id="technicianUnreadNotificationsCount"
+                                    class="mb-0">—</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-body">
+                                <p class="text-muted mb-2">
+                                    Notifications on This Page
+                                </p>
+                                <h3 id="technicianLoadedNotificationsCount"
+                                    class="mb-0">—</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Read status filter -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-12 col-md-5">
+                                <label for="technicianNotificationReadFilter"
+                                       class="form-label">
+                                    Notification Status
+                                </label>
+
+                                <select
+                                    id="technicianNotificationReadFilter"
+                                    class="form-select"
+                                >
+                                    <option value="all">All Notifications</option>
+                                    <option value="unread">Unread Only</option>
+                                    <option value="read">Read Only</option>
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-md-3">
+                                <button
+                                    id="clearTechnicianNotificationFilterButton"
+                                    class="btn btn-outline-secondary w-100"
+                                    type="button"
+                                >
+                                    Clear Filter
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notifications list -->
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white d-flex
+                                justify-content-between align-items-center
+                                flex-wrap gap-2 py-3">
+                        <h5 class="mb-0">Notification List</h5>
+                        <span
+                            id="technicianNotificationsResultLabel"
+                            class="text-muted small"
+                        >Loading notifications...</span>
+                    </div>
+
+                    <div class="card-body">
+                        <div
+                            id="technicianNotificationsLoading"
+                            class="text-center py-5"
+                        >
+                            <div class="spinner-border text-primary"
+                                 role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mt-2 mb-0">
+                                Retrieving notifications...
+                            </p>
+                        </div>
+
+                        <div
+                            id="technicianNotificationsEmptyState"
+                            class="text-center text-muted py-5 d-none"
+                        >
+                            <h6 id="technicianNotificationsEmptyTitle">
+                                No notifications found
+                            </h6>
+                            <p id="technicianNotificationsEmptyMessage"
+                               class="mb-0">
+                                New notifications will appear here.
+                            </p>
+                        </div>
+
+                        <div
+                            id="technicianNotificationsList"
+                            class="list-group list-group-flush d-none"
+                        ></div>
+
+                        <!-- Pagination -->
+                        <div class="d-flex justify-content-between
+                                    align-items-center flex-wrap gap-2 mt-4">
+                            <small
+                                id="technicianNotificationsPaginationInfo"
+                                class="text-muted"
+                            >Page 1</small>
+
+                            <div class="d-flex gap-2">
+                                <button
+                                    id="previousTechnicianNotificationsPageButton"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    type="button"
+                                    disabled
+                                >
+                                    Previous
+                                </button>
+
+                                <button
+                                    id="nextTechnicianNotificationsPageButton"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    type="button"
+                                    disabled
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../../js/app.js"></script>
+    <script src="../../js/technician-notifications.js"></script>
+</body>
+</html>

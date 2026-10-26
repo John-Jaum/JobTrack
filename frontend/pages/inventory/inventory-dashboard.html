@@ -1,0 +1,321 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Dashboard | JobTrack</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+    <div class="app-container">
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h4>JobTrack</h4>
+                <p>University Facilities</p>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="inventory-dashboard.html" class="nav-link active"
+                   aria-current="page">
+                    <span>Dashboard</span>
+                </a>
+
+                <a href="inventory.html" class="nav-link">
+                    <span>Inventory</span>
+                </a>
+
+                <a href="inventory-transactions.html" class="nav-link">
+                    <span>Material Transactions</span>
+                </a>
+
+                <a href="inventory-notifications.html" class="nav-link">
+                    <span>Notifications</span>
+                    <span
+                        id="inventorySidebarUnreadCount"
+                        class="badge bg-danger ms-auto d-none"
+                    >0</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+
+                <button
+                    type="button"
+                    id="logoutButton"
+                    class="btn btn-outline-secondary btn-sm w-100 mt-3"
+                >
+                    Log Out
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <header class="topbar">
+                <div>
+                    <h5 class="mb-1">Inventory Dashboard</h5>
+                    <small class="text-muted">
+                        Monitor materials and inventory activity.
+                    </small>
+                </div>
+
+                <div class="user-info text-end">
+                    <strong id="inventoryTopbarUserName">
+                        Inventory Staff
+                    </strong>
+                    <span class="user-role">Inventory Staff</span>
+                </div>
+            </header>
+
+            <section class="content">
+
+                <!-- Page Alerts -->
+                <div
+                    id="inventoryDashboardAlert"
+                    class="alert d-none"
+                    role="alert"
+                    aria-live="polite"
+                ></div>
+
+                <!-- Welcome Section -->
+                <section class="mb-4">
+                    <h3>
+                        Welcome, <span id="inventoryWelcomeName">Staff</span>!
+                    </h3>
+                    <p class="text-muted mb-0">
+                        Here's your inventory workspace.
+                    </p>
+                </section>
+
+                <!-- Summary Cards -->
+                <section class="mb-4" aria-labelledby="inventorySummaryHeading">
+                    <div class="d-flex justify-content-between align-items-center
+                                flex-wrap gap-2 mb-3">
+                        <h4 id="inventorySummaryHeading" class="mb-0">
+                            Inventory Overview
+                        </h4>
+
+                        <button
+                            type="button"
+                            id="refreshInventoryDashboardButton"
+                            class="btn btn-outline-primary btn-sm"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12 col-sm-6 col-xl-3">
+                            <article class="card h-100">
+                                <div class="card-body">
+                                    <p class="text-muted mb-2">
+                                        Inventory Items
+                                    </p>
+                                    <h3
+                                        id="inventoryTotalItems"
+                                        class="mb-2"
+                                    >—</h3>
+                                    <small class="text-muted">
+                                        Awaiting inventory API
+                                    </small>
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-xl-3">
+                            <article class="card h-100">
+                                <div class="card-body">
+                                    <p class="text-muted mb-2">
+                                        Low-Stock Items
+                                    </p>
+                                    <h3
+                                        id="inventoryLowStockItems"
+                                        class="mb-2"
+                                    >—</h3>
+                                    <small class="text-muted">
+                                        Awaiting stock thresholds
+                                    </small>
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-xl-3">
+                            <article class="card h-100">
+                                <div class="card-body">
+                                    <p class="text-muted mb-2">
+                                        Materials Issued
+                                    </p>
+                                    <h3
+                                        id="inventoryMaterialsIssued"
+                                        class="mb-2"
+                                    >—</h3>
+                                    <small class="text-muted">
+                                        Awaiting transaction API
+                                    </small>
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-xl-3">
+                            <article class="card h-100">
+                                <div class="card-body">
+                                    <p class="text-muted mb-2">
+                                        Unread Notifications
+                                    </p>
+                                    <h3
+                                        id="inventoryUnreadNotifications"
+                                        class="mb-2"
+                                    >—</h3>
+                                    <small class="text-muted">
+                                        Notification summary
+                                    </small>
+                                </div>
+                            </article>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Inventory Actions -->
+                <section class="mb-4" aria-labelledby="inventoryActionsHeading">
+                    <h4 id="inventoryActionsHeading" class="mb-3">
+                        Quick Actions
+                    </h4>
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <a
+                                href="inventory.html"
+                                class="card h-100 text-decoration-none"
+                            >
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        View Inventory
+                                    </h5>
+                                    <p class="card-text text-muted mb-0">
+                                        Review available materials and stock
+                                        quantities.
+                                    </p>
+                                </div>
+                            </a>
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <a
+                                href="transactions.html"
+                                class="card h-100 text-decoration-none"
+                            >
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        Material Transactions
+                                    </h5>
+                                    <p class="card-text text-muted mb-0">
+                                        Review material movement and usage
+                                        records.
+                                    </p>
+                                </div>
+                            </a>
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <a
+                                href="notifications.html"
+                                class="card h-100 text-decoration-none"
+                            >
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        View Notifications
+                                    </h5>
+                                    <p class="card-text text-muted mb-0">
+                                        Check system alerts and updates.
+                                    </p>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Recent Activity -->
+                <section aria-labelledby="inventoryActivityHeading">
+                    <div class="d-flex justify-content-between
+                                align-items-center flex-wrap gap-2 mb-3">
+                        <div>
+                            <h4 id="inventoryActivityHeading" class="mb-1">
+                                Recent Material Transactions
+                            </h4>
+                            <p class="text-muted mb-0">
+                                Latest inventory activity.
+                            </p>
+                        </div>
+
+                        <a
+                            href="transactions.html"
+                            class="btn btn-outline-primary btn-sm"
+                        >
+                            View All
+                        </a>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body">
+                            <div
+                                id="inventoryActivityLoading"
+                                class="text-muted"
+                                role="status"
+                            >
+                                Inventory transaction data will appear
+                                when the backend endpoint is available.
+                            </div>
+
+                            <div
+                                id="inventoryActivityEmptyState"
+                                class="text-center py-4 d-none"
+                            >
+                                <h5>No recent transactions</h5>
+                                <p class="text-muted mb-0">
+                                    There are no transactions to display.
+                                </p>
+                            </div>
+
+                            <div
+                                id="inventoryActivityContainer"
+                                class="table-responsive d-none"
+                            >
+                                <table class="table table-hover align-middle
+                                              mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Reference</th>
+                                            <th scope="col">Material</th>
+                                            <th scope="col">Activity</th>
+                                            <th scope="col">Quantity</th>
+                                            <th scope="col">Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="inventoryActivityTableBody">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </section>
+        </main>
+    </div>
+
+    <script
+        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+    ></script>
+    <script src="../../js/app.js"></script>
+    <script src="../../js/inventory-dashboard.js"></script>
+</body>
+</html>
