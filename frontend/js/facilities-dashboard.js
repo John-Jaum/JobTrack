@@ -3,7 +3,7 @@
 
   const API_REQUESTS_ENDPOINT = "/maintenance-requests";
   const API_SUMMARY_ENDPOINT = "/dashboard/summary";
-  const API_REQUEST_STATUSES_ENDPOINT = "/lookups/request_statuses";
+  const API_REQUEST_STATUSES_ENDPOINT = "/statuses";
   const PER_PAGE = 100;
 
   let requests = [];
@@ -27,29 +27,21 @@
   }
 
   function getLocationName(request) {
-    const location = request?.location;
-
-    if (location && typeof location === "object") {
-      return location.name
-        ?? location.location_name
-        ?? location.building_name
+    return request?.location_label
+        ?? request?.location?.name
+        ?? request?.location?.location_name
+        ?? request?.location?.building_name
+        ?? request?.location_name
         ?? "—";
-    }
-
-    return location ?? request?.location_name ?? "—";
   }
 
   function getCategoryName(request) {
-    const category = request?.category;
-
-    if (category && typeof category === "object") {
-      return category.name
-        ?? category.category_name
+    return request?.category_label
+        ?? request?.category?.name
+        ?? request?.category?.category_name
+        ?? request?.category_name
         ?? "—";
-    }
-
-    return category ?? request?.category_name ?? "—";
-  }
+}
 
   function getRequesterName(request) {
     const requester = request?.requester;
@@ -214,45 +206,79 @@
     }
   }
 
+
   async function loadSummary() {
+    const counterIds = [
+      "pendingCount",
+      "highPriorityCount",
+      "activeJobsCount",
+      "completedJobsCount"
+    ];
+
     try {
-      const response = await apiRequest(
-        API_SUMMARY_ENDPOINT
-      );
+      const [requestsResponse, jobsResponse] = await Promise.all([
+        apiRequest(`${API_REQUESTS_ENDPOINT}?per_page=100&page=1`),
+        apiRequest("/job-orders?per_page=100&page=1")
+      ]);
 
-      const facilities = response?.data?.facilities;
+      const requests = Array.isArray(requestsResponse?.data)
+        ? requestsResponse.data
+        : [];
 
-      if (!facilities || typeof facilities !== "object") {
-        throw new Error(
-          "The summary response did not contain facilities dashboard counters."
-        );
+      const jobs = Array.isArray(jobsResponse?.data)
+        ? jobsResponse.data
+        : [];
+
+      const pendingCount = requests.filter(
+        request => String(request.status_label ?? "").toLowerCase() === "pending"
+      ).length;
+
+      const highPriorityCount = requests.filter(
+        request => ["high", "urgent"].includes(
+          String(request.priority ?? "").toLowerCase()
+        )
+      ).length;
+
+      const activeJobsCount = jobs.filter(
+        job => ["assigned", "in progress", "on hold"].includes(
+          String(job.status_label ?? job.status?.name ?? job.status ?? "").toLowerCase()
+        )
+      ).length;
+
+      const completedJobsCount = jobs.filter(
+        job => ["completed", "closed"].includes(
+          String(job.status_label ?? job.status?.name ?? job.status ?? "").toLowerCase()
+        )
+      ).length;
+
+      const counters = {
+        pendingCount,
+        highPriorityCount,
+        activeJobsCount,
+        completedJobsCount
+      };
+
+      for (const [id, value] of Object.entries(counters)) {
+        const element = byId(id);
+        if (element) element.textContent = String(value);
       }
 
-      renderSummary(facilities);
       return true;
     } catch (error) {
-      const counterIds = [
-        "pendingCount",
-        "highPriorityCount",
-        "activeJobsCount",
-        "completedJobsCount"
-      ];
-
-      counterIds.forEach((id) => {
+      counterIds.forEach(id => {
         const element = byId(id);
         if (element) element.textContent = "—";
       });
 
       showDashboardAlert(
-        `Unable to load dashboard summary. ${
-          error?.message || "Please try again."
-        }`,
+        `Unable to load dashboard counters. ${error?.message || "Please try again."}`,
         "danger"
       );
 
       return false;
     }
   }
+
 
   async function loadStatusLookup() {
     try {

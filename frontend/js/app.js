@@ -99,7 +99,7 @@ async function apiRequest(endpoint, options = {}) {
 
 
 
-            
+
 
 
 
@@ -390,13 +390,16 @@ function setupMyRequestsPage() {
     const requests = getRequests();
 
     /* -----------------------------
-       Request Count
+        Request Count
     ----------------------------- */
     const requestCount =
         document.getElementById("requestCount");
-    requestCount.textContent =
-        requests.length +
-        (requests.length === 1 ? " request" : " requests");
+
+    if (requestCount) {
+        requestCount.textContent =
+            requests.length +
+            (requests.length === 1 ? " request" : " requests");
+    }
 
     /* -----------------------------
        Empty State
@@ -569,10 +572,10 @@ async function setupRequestDetailsPage() {
             request.reference ?? `MR-${request.request_id}`;
 
         categoryElement.textContent =
-            request.category?.name ?? "—";
+            request.category_label ?? "—";
 
         locationElement.textContent =
-            request.location?.name ?? "—";
+            request.location_label ?? "—";
 
         priorityElement.textContent =
             request.priority ?? "—";
@@ -593,7 +596,7 @@ async function setupRequestDetailsPage() {
             request.description ?? "—";
 
         const statusName =
-            request.status?.status_name ?? "Unknown";
+            request.status_label ?? "Unknown";
 
         const statusClasses = {
             "Pending": "text-bg-warning",
@@ -691,6 +694,7 @@ function showRequestDetailsError(message) {
 }
 
 
+
 /* =================================
    Requester Dashboard - Live API
 ================================= */
@@ -698,16 +702,16 @@ function showRequestDetailsError(message) {
 async function setupRequesterDashboard() {
     const totalElement =
         document.getElementById("totalRequests");
-
-    // Do nothing if this isn't the dashboard page.
     if (!totalElement) return;
 
+    const inProgressElement =
+        document.getElementById("inProgressRequests");
+    const completedElement =
+        document.getElementById("completedRequests");
     const loadingElement =
         document.getElementById("dashboardLoading");
-
     const errorElement =
         document.getElementById("dashboardError");
-
     const tableBody =
         document.getElementById("recentRequestsTableBody");
 
@@ -721,68 +725,62 @@ async function setupRequesterDashboard() {
     }
 
     try {
-        // The contract provides counters and recent requests together.
-        const response =
-            await apiRequest("/dashboard/summary");
-
-        const summary = response.data?.requester;
-
-        if (!summary) {
-            throw new Error(
-                "The API response does not contain requester dashboard data."
-            );
-        }
-
-        // Update summary cards.
-        totalElement.textContent =
-            summary.total_requests ?? 0;
-
-        document.getElementById(
-            "inProgressRequests"
-        ).textContent =
-            summary.in_progress_requests ?? 0;
-
-        document.getElementById(
-            "completedRequests"
-        ).textContent =
-            summary.completed_requests ?? 0;
-
-        // Update recent requests table.
-        renderRecentRequests(
-            summary.recent_requests ?? [],
-            tableBody
+        const response = await apiRequest(
+            "/me/maintenance-requests?per_page=100&page=1"
         );
 
+        const requests = Array.isArray(response.data)
+            ? response.data
+            : [];
+
+        const total = response.meta?.total ?? requests.length;
+
+        const inProgress = requests.filter(
+            request => request.status_label === "In Progress"
+        ).length;
+
+        const completed = requests.filter(
+            request => request.status_label === "Completed"
+        ).length;
+
+        totalElement.textContent = total;
+
+        if (inProgressElement) {
+            inProgressElement.textContent = inProgress;
+        }
+
+        if (completedElement) {
+            completedElement.textContent = completed;
+        }
+
+        renderRecentRequests(requests, tableBody);
     } catch (error) {
-        console.error("Dashboard API error:", error);
+        console.error("Requester dashboard API error:", error);
 
         if (errorElement) {
-            errorElement.textContent = error.message;
+            errorElement.textContent =
+                "Unable to load dashboard data. Please refresh and try again.";
             errorElement.classList.remove("d-none");
         }
 
-        if (tableBody) {
-            tableBody.replaceChildren();
+        totalElement.textContent = "—";
 
-            const row = document.createElement("tr");
-            const cell = document.createElement("td");
-
-            cell.colSpan = 5;
-            cell.className =
-                "text-center text-muted py-4";
-            cell.textContent =
-                "Unable to load your requests.";
-
-            row.appendChild(cell);
-            tableBody.appendChild(row);
+        if (inProgressElement) {
+            inProgressElement.textContent = "—";
         }
 
+        if (completedElement) {
+            completedElement.textContent = "—";
+        }
+
+        renderRecentRequests([], tableBody);
     } finally {
         if (loadingElement) {
             loadingElement.classList.add("d-none");
         }
     }
 }
+
 
 
 /* =================================
@@ -834,19 +832,19 @@ function renderRecentRequests(requests, tableBody) {
             document.createElement("td");
 
         categoryCell.textContent =
-            request.category?.name ?? "—";
+            request.category_label ?? "—";
 
         const locationCell =
             document.createElement("td");
 
         locationCell.textContent =
-            request.location?.name ?? "—";
+            request.location_label ?? "—";
 
         const statusCell =
             document.createElement("td");
 
         const statusName =
-            request.status?.status_name ?? "Unknown";
+            request.status_label ?? "Unknown";
 
         const statusBadge =
             document.createElement("span");
@@ -870,9 +868,10 @@ function renderRecentRequests(requests, tableBody) {
 
         const dateCell = document.createElement("td");
 
-        dateCell.textContent = request.submitted_at
+        dateCell.textContent = (request.submitted_at || request.created_at)
             ? formatDate(
-                request.submitted_at.substring(0, 10)
+                (request.submitted_at || request.created_at)
+                .substring(0, 10)
             )
             : "—";
 

@@ -28,7 +28,13 @@
     // Only the requester destination is confirmed by the supplied frontend files.
     // Add the other role destinations here once their actual page paths are known.
     const ROLE_DASHBOARD_PATHS = {
-        "Requester": "pages/requester/dashboard.html"
+        "Administrator": "pages/admin/admin-dashboard.html",
+        "Facilities Officer": "pages/facilities/facilities-dashboard.html",
+        "Facilities Staff": "pages/facilities/facilities-dashboard.html",
+        "Inventory Staff": "pages/inventory/inventory-dashboard.html",
+        "Inventory Officer": "pages/inventory/inventory-dashboard.html",
+        "Requester": "pages/requester/requester-dashboard.html",
+        "Technician": "pages/technician/technician-dashboard.html"
     };
 
     const form = document.getElementById("loginForm");
@@ -131,7 +137,7 @@
 
         const payload = await response.json();
         const authData = payload?.data;
-        const token = authData?.token;
+        const token = authData?.access_token;
         const user = authData?.user;
         const roleName = user?.role?.role_name;
 

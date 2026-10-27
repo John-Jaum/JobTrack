@@ -1,0 +1,4674 @@
+openapi: 3.1.0
+info:
+  title: JobTrack API
+  version: 5.0.0
+  summary: University facilities maintenance request and job order management
+  description: "REST contract for JobTrack (Laravel backend, Bootstrap/JS frontend).\n\n**Conventions**\n- JSON\
+    \ over HTTPS; all timestamps are ISO 8601 UTC.\n- Auth: Laravel Sanctum bearer token from `POST /auth/login`.\n\
+    - Success bodies are wrapped as `{ \"data\": ... }`; lists add `meta` pagination (`page`, `per_page`).\n- Roles:\
+    \ Requester, Facilities Officer, Technician, Inventory Staff, Administrator. Each operation lists its allowed\
+    \ roles.\n- Status labels are enums here and are also served from lookup tables (`GET /lookups/{lookup}`). Priority\
+    \ is a database ENUM, not a lookup table.\n\nDerived from the JobTrack database schema, the system proposal,\
+    \ and the current frontend pages.\n\n## Authentication\nLaravel Sanctum **personal access tokens** (bearer).\
+    \ The frontend is a static site on a different origin from the Laravel API, so SPA cookie auth is not used.\
+    \ Backend setup: `php artisan install:api` (Sanctum is not yet in `composer.json`), allow the frontend origin\
+    \ in `config/cors.php`, set `sanctum.expiration`. `POST /auth/login` is throttled (429 with `Retry-After`).\
+    \ `POST /auth/logout` revokes the presented token.\n\n## Pagination (every list endpoint)\nQuery: `page` (default\
+    \ 1) and `per_page` (default 15, max 100; reference-data lists default to 100). Response: `{ \"data\": [...],\
+    \ \"meta\": { current_page, per_page, total, last_page, from, to } }`. Sorting, where offered, uses `sort=field`\
+    \ or `sort=-field`. Report endpoints return a report object instead; `recurring-issues` is paginated like any\
+    \ list.\n\n## Errors\nEvery error body is `{ \"message\": string, \"code\": string }`; 422 adds `errors: { field:\
+    \ [messages] }`. `code` is a stable value: `unauthenticated` (401), `forbidden` (403), `not_found` (404), `conflict`\
+    \ and `invalid_transition` (409), `payload_too_large` (413), `validation_failed` (422), `too_many_requests`\
+    \ (429), `server_error` (500). Laravel's default error bodies have no `code`, so add it in the exception rendering\
+    \ in `bootstrap/app.php`. Every operation can also return 500.\n\n## Record-level authorization\nRole checks\
+    \ alone are not enough: each endpoint also applies a record-level rule (a Laravel Policy). **403** means the\
+    \ caller's role may not use the endpoint, or the caller can see the record but may not perform the action. **404**\
+    \ means the record is not visible to the caller, so its existence is not revealed.\n- **Maintenance request:**\
+    \ a Requester sees and edits only their own; a Technician sees requests whose job order they are assigned to\
+    \ (assignment not Declined); Facilities Officer and Administrator see all; Inventory Staff none.\n- **Job order:**\
+    \ a Technician sees only job orders they are assigned to; Inventory Staff has read access to all; Officer and\
+    \ Administrator everything. Requesters never see job orders directly, only the job order summary inside their\
+    \ request.\n- **Job order children** (assignments, work records, materials used, attachments) are visible whenever\
+    \ the job order is. Assigned technicians (Lead or Support) may record work and materials and upload files; only\
+    \ the Lead may start, hold or complete the job order; a technician may change only their own assignment (403\
+    \ on another technician's).\n- **Work records** are append-only (no update or delete endpoint) and are always\
+    \ recorded for the caller as `technician_id`.\n- **Attachments** are visible with their parent record and deletable\
+    \ by the uploader, an Officer or an Administrator.\n- **Material requests:** a Technician sees only their own;\
+    \ Inventory Staff, Officer and Administrator see all. **Notifications:** own only (404 otherwise). **Users:**\
+    \ Administrator only; everyone else uses `/auth/me`.\n\n## File uploads\nApplies to every `multipart/form-data`\
+    \ endpoint with a `files[]` field. Validate in a Laravel FormRequest: at most **5 files** per call, **5 MB**\
+    \ (5,242,880 bytes) per file, at most **10 attachments** per record in total; allowed content types `image/jpeg`,\
+    \ `image/png`, `image/webp` and `application/pdf`, checked from the file contents (`mimetypes` rule), not the\
+    \ client-supplied extension. Violations return 422 with `errors.files` or `errors.files.N`; a request over the\
+    \ web server limit returns 413 (set `upload_max_filesize` and `post_max_size` to at least 26M). Files go on\
+    \ a private disk under a random name (`{uuid}__{sanitised original name}`) and are never served from `public/`.\
+    \ `Attachment.file_name` is the original name recovered from that path. `Attachment.url` is a temporary signed\
+    \ URL (15 minutes) to the `.../file` endpoint, which needs no bearer token so it works in `<img>` and `<a>`.\n\
+    \n## Closure and acknowledgement\n1. The assigned Lead technician completes the job order (In Progress → Completed);\
+    \ the request becomes Completed and the requester is notified.\n2. The requester confirms with `POST /maintenance-requests/{id}/acknowledge`.\
+    \ In one transaction the job order moves Completed → Closed (`closed_at` set) and the request becomes Closed.\
+    \ The Officer who created the job order and the assigned technicians are notified.\n3. If the requester does\
+    \ not respond, an Officer or Administrator may close the job order with `POST /job-orders/{id}/transitions`;\
+    \ the request is closed with it.\n4. Before closure an Officer or Administrator may reopen the job order (Completed\
+    \ → In Progress) for rework. **Closed is final**: no further transitions, edits or acknowledgements (409).\n\
+    Every step is audited in the append-only `job_order_status_history` table (who, when, from/to status, remarks,\
+    \ and an event type that distinguishes the requester's acknowledgement from an Officer close). `GET /job-orders/{id}/history`\
+    \ lists it, and the job order detail exposes `closed_by`, `acknowledged_by` and `acknowledged_at` derived from\
+    \ it.\n\n## Naming conventions\nsnake_case everywhere. Ids are `<entity>_id`. A lookup column is exposed as\
+    \ `<name>_id` plus `<name>_label` (for example `status_id`, `status_label`), and lookup endpoints return `{id,\
+    \ label}`. Priority is a database ENUM (Low, Medium, High, Urgent), not a lookup table, so it has no id/label\
+    \ pair and no lookup endpoint. Timestamps are `*_at` (ISO 8601 UTC), dates are `*_date`, booleans are `is_*`.\
+    \ Related records are nested summary objects named for the relation (`requester`, `material`, `technician`).\
+    \ Money, hours and quantities are JSON numbers (cast DECIMAL to float in the API Resource; Eloquent returns\
+    \ strings by default).\n\n## Job order status transitions\n| From | To | Who | Notes |\n|---|---|---|---|\n\
+    | Approved | Assigned | Facilities Officer, Administrator | Manual, or automatic when the first technician is\
+    \ assigned |\n| Assigned | Approved | system | Automatic when no active technician remains (all unassigned or\
+    \ declined) |\n| Assigned | In Progress | Technician | Lead technician starts work |\n| In Progress | On Hold\
+    \ | Technician, Facilities Officer, Administrator | Lead technician or Officer |\n| On Hold | In Progress |\
+    \ Technician, Facilities Officer, Administrator | Resume |\n| In Progress | Completed | Technician | Lead technician\
+    \ finishes work |\n| Completed | Closed | Facilities Officer, Administrator, system | System: requester acknowledgement\
+    \ (`POST /maintenance-requests/{id}/acknowledge`). Officer or Administrator: manual close when the requester\
+    \ does not respond |\n| Completed | In Progress | Facilities Officer, Administrator | Reopen for rework; only\
+    \ before Closed. Closed is final |\n\nJob orders start as Approved (or Assigned when created with technicians).\
+    \ Pending remains in the lookup table but is never an initial state. The request status mirrors the job order\
+    \ from In Progress onward; acknowledgement or manual closure closes both (see Closure and acknowledgement).\n\
+    \n## Role permissions (generated from each operation's `x-roles`)\n| Operation | Req | Officer | Tech | Inv\
+    \ | Admin |\n|---|:-:|:-:|:-:|:-:|:-:|\n| `POST /auth/login` | public | public | public | public | public |\n\
+    | `POST /auth/logout` | ✔ | ✔ | ✔ | ✔ | ✔ |\n| `GET /auth/me` | ✔ | ✔ | ✔ | ✔ | ✔ |\n| `GET /users` | – | –\
+    \ | – | – | ✔ |\n| `POST /users` | – | – | – | – | ✔ |\n| `GET /users/{userId}` | – | – | – | – | ✔ |\n| `PATCH\
+    \ /users/{userId}` | – | – | – | – | ✔ |\n| `GET /technicians` | – | ✔ | – | – | ✔ |\n| `GET /roles` | – | ✔\
+    \ | – | – | ✔ |\n| `GET /categories` | ✔ | ✔ | ✔ | ✔ | ✔ |\n| `POST /categories` | – | – | – | – | ✔ |\n| `PATCH\
+    \ /categories/{categoryId}` | – | – | – | – | ✔ |\n| `DELETE /categories/{categoryId}` | – | – | – | – | ✔ |\n\
+    | `GET /locations` | ✔ | ✔ | ✔ | ✔ | ✔ |\n| `POST /locations` | – | – | – | – | ✔ |\n| `PATCH /locations/{locationId}`\
+    \ | – | – | – | – | ✔ |\n| `DELETE /locations/{locationId}` | – | – | – | – | ✔ |\n| `GET /lookups/{lookup}`\
+    \ | ✔ | ✔ | ✔ | ✔ | ✔ |\n| `GET /maintenance-requests` | ✔ | ✔ | ✔ | – | ✔ |\n| `POST /maintenance-requests`\
+    \ | ✔ | ✔ | – | – | ✔ |\n| `GET /me/maintenance-requests` | ✔ | ✔ | – | – | ✔ |\n| `GET /maintenance-requests/{requestId}`\
+    \ | ✔ | ✔ | ✔ | – | ✔ |\n| `PATCH /maintenance-requests/{requestId}` | ✔ | ✔ | – | – | ✔ |\n| `DELETE /maintenance-requests/{requestId}`\
+    \ | ✔ | – | – | – | ✔ |\n| `POST /maintenance-requests/{requestId}/review` | – | ✔ | – | – | ✔ |\n| `POST /maintenance-requests/{requestId}/acknowledge`\
+    \ | ✔ | – | – | – | – |\n| `GET /maintenance-requests/{requestId}/attachments` | ✔ | ✔ | ✔ | – | ✔ |\n| `POST\
+    \ /maintenance-requests/{requestId}/attachments` | ✔ | ✔ | – | – | ✔ |\n| `DELETE /maintenance-requests/{requestId}/attachments/{attachmentId}`\
+    \ | ✔ | ✔ | – | – | ✔ |\n| `GET /maintenance-requests/{requestId}/attachments/{attachmentId}/file` | public\
+    \ | public | public | public | public |\n| `GET /job-orders` | – | ✔ | ✔ | ✔ | ✔ |\n| `POST /job-orders` | –\
+    \ | ✔ | – | – | ✔ |\n| `GET /job-orders/{jobOrderId}` | – | ✔ | ✔ | ✔ | ✔ |\n| `PATCH /job-orders/{jobOrderId}`\
+    \ | – | ✔ | – | – | ✔ |\n| `POST /job-orders/{jobOrderId}/transitions` | – | ✔ | ✔ | – | ✔ |\n| `GET /job-orders/{jobOrderId}/history`\
+    \ | – | ✔ | ✔ | – | ✔ |\n| `GET /job-orders/{jobOrderId}/assignments` | – | ✔ | ✔ | ✔ | ✔ |\n| `POST /job-orders/{jobOrderId}/assignments`\
+    \ | – | ✔ | – | – | ✔ |\n| `PATCH /job-orders/{jobOrderId}/assignments/{technicianId}` | – | ✔ | ✔ | – | ✔ |\n\
+    | `DELETE /job-orders/{jobOrderId}/assignments/{technicianId}` | – | ✔ | – | – | ✔ |\n| `GET /job-orders/{jobOrderId}/work-records`\
+    \ | – | ✔ | ✔ | – | ✔ |\n| `POST /job-orders/{jobOrderId}/work-records` | – | – | ✔ | – | – |\n| `GET /job-orders/{jobOrderId}/materials`\
+    \ | – | ✔ | ✔ | ✔ | ✔ |\n| `POST /job-orders/{jobOrderId}/materials` | – | ✔ | ✔ | – | – |\n| `GET /job-orders/{jobOrderId}/attachments`\
+    \ | – | ✔ | ✔ | – | ✔ |\n| `POST /job-orders/{jobOrderId}/attachments` | – | ✔ | ✔ | – | – |\n| `DELETE /job-orders/{jobOrderId}/attachments/{attachmentId}`\
+    \ | – | ✔ | ✔ | – | ✔ |\n| `GET /job-orders/{jobOrderId}/attachments/{attachmentId}/file` | public | public\
+    \ | public | public | public |\n| `GET /materials` | – | ✔ | ✔ | ✔ | ✔ |\n| `POST /materials` | – | – | – |\
+    \ ✔ | ✔ |\n| `GET /materials/{materialId}` | – | ✔ | ✔ | ✔ | ✔ |\n| `PATCH /materials/{materialId}` | – | –\
+    \ | – | ✔ | ✔ |\n| `POST /materials/{materialId}/stock-adjustments` | – | – | – | ✔ | ✔ |\n| `GET /material-requests`\
+    \ | – | ✔ | ✔ | ✔ | ✔ |\n| `POST /material-requests` | – | ✔ | ✔ | – | – |\n| `GET /material-requests/{materialRequestId}`\
+    \ | – | ✔ | ✔ | ✔ | ✔ |\n| `POST /material-requests/{materialRequestId}/fulfill` | – | – | – | ✔ | – |\n| `POST\
+    \ /material-requests/{materialRequestId}/reject` | – | – | – | ✔ | – |\n| `GET /notifications` | ✔ | ✔ | ✔ |\
+    \ ✔ | ✔ |\n| `POST /notifications/{notificationId}/read` | ✔ | ✔ | ✔ | ✔ | ✔ |\n| `POST /notifications/read-all`\
+    \ | ✔ | ✔ | ✔ | ✔ | ✔ |\n| `GET /dashboard/summary` | ✔ | ✔ | ✔ | ✔ | ✔ |\n| `GET /reports/maintenance-activity`\
+    \ | – | ✔ | – | – | ✔ |\n| `GET /reports/recurring-issues` | – | ✔ | – | – | ✔ |\n\n## Data model alignment\
+    \ (checked against `jobtrack_db.mwb`, schema `jobtrack_db`, 18 tables)\n- **Derived, not stored:** `reference`\
+    \ (from `request_id`), `*_label`, `requester_name`, `attachment_count`, `is_low_stock`, attachment `file_name`/`mime_type`/`size_bytes`,\
+    \ job order totals.\n- **Enforced by the API, not the database:** one Lead per job order, stock never below\
+    \ zero, status transitions, requester-only visibility.\n- **Seed data required (the model contains none):**\
+    \ the 5 role names, request and job order status names, material request status names, notification types. Spelling\
+    \ must match the enums used here.\n- **Model limits to be aware of:** notifications link only to a job order\
+    \ (null for request-level events); there are no columns for review remarks or a completed timestamp (acknowledgement\
+    \ and closure are audited by the proposed `job_order_status_history` table below); `materials.current_stock`\
+    \ is INT while `quantity_used` and `quantity_requested` are DECIMAL(10,2).\n\n## Required model addition (not\
+    \ yet in `jobtrack_db.mwb`)\nThe acknowledgement and closure audit trail needs one new table. Add it to the\
+    \ model and create a matching migration; it is append-only (no update or delete endpoint). Transition `remarks`\
+    \ are stored here too.\n```sql\nCREATE TABLE job_order_status_history (\n  history_id     INT NOT NULL AUTO_INCREMENT,\n\
+    \  job_order_id   INT NOT NULL,\n  from_status_id INT NULL,\n  to_status_id   INT NOT NULL,\n  event       \
+    \   ENUM('Created','Status Change','Requester Acknowledgement') NOT NULL DEFAULT 'Status Change',\n  changed_by\
+    \     INT NOT NULL,\n  changed_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  remarks        VARCHAR(255)\
+    \ NULL,\n  PRIMARY KEY (history_id),\n  INDEX (job_order_id), INDEX (from_status_id), INDEX (to_status_id),\
+    \ INDEX (changed_by),\n  FOREIGN KEY (job_order_id)   REFERENCES job_orders(job_order_id) ON DELETE CASCADE,\n\
+    \  FOREIGN KEY (from_status_id) REFERENCES job_order_statuses(status_id),\n  FOREIGN KEY (to_status_id)   REFERENCES\
+    \ job_order_statuses(status_id),\n  FOREIGN KEY (changed_by)     REFERENCES users(user_id)\n);\n```\n\n## Laravel\
+    \ implementation notes\n- Routes in `routes/api.php` under the `v1` prefix with `auth:sanctum`; one Policy per\
+    \ model, one FormRequest per write operation, one API Resource per response schema. Each DB-backed schema carries\
+    \ an `x-table` extension naming its table.\n- Enums as PHP backed enums (`Priority`, `AssignmentRole`, `AssignmentStatus`);\
+    \ roles and statuses from seeders (`x-seed-data`). The current frontend sends `Normal`; it must send `Medium`.\n\
+    - Status changes go through one service class that applies the transition table in a DB transaction, mirrors\
+    \ the request status, writes `approved_at` / `closed_at`, appends a `job_order_status_history` row and creates\
+    \ notifications.\n- Stock deduction (job order materials, fulfilled material requests) uses `lockForUpdate()`\
+    \ inside the transaction.\n- Paginate with `paginate($per_page)` and map to `{data, meta}`. `GET /me/maintenance-requests`\
+    \ and `GET /maintenance-requests` share one query scope.\n- `reference` is `'MR-' . str_pad($request_id, 4,\
+    \ '0', STR_PAD_LEFT)`; labels come from eager-loaded relations to avoid N+1 queries.\n\n## Seed data (required;\
+    \ the model contains none)\n- roles: Requester, Facilities Officer, Technician, Inventory Staff, Administrator\n\
+    - request_statuses: Pending, Approved, Rejected, In Progress, On Hold, Completed, Closed\n- job_order_statuses:\
+    \ Pending, Approved, Assigned, In Progress, On Hold, Completed, Closed\n- material_request_statuses: Pending,\
+    \ Fulfilled, Rejected\n- notification_types: New Request, Request Status Changed, Job Assigned, Material Request,\
+    \ Material Request Update, Low Stock\n"
+  contact:
+    name: JobTrack team
+servers:
+- url: http://localhost:8000/api/v1
+  description: Local (`php artisan serve`)
+security:
+- bearerAuth: []
+tags:
+- name: Auth
+- name: Users
+- name: Lookups
+  description: Categories, locations, status tables
+- name: Maintenance Requests
+- name: Job Orders
+- name: Materials & Inventory
+- name: Notifications
+- name: Dashboard & Reports
+paths:
+  /auth/login:
+    post:
+      tags:
+      - Auth
+      summary: Log in and receive an access token
+      operationId: login
+      description: 'Exchanges credentials for a Laravel Sanctum personal access token. Send it as `Authorization:
+        Bearer <token>`. Accounts with `is_active = false` are rejected with 422. There is no public registration;
+        accounts are created by an Administrator.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AuthToken'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/ServerError'
+      security: []
+  /auth/logout:
+    post:
+      tags:
+      - Auth
+      summary: Revoke the current token
+      operationId: logout
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: '**Allowed roles:** Requester, Facilities Officer, Technician, Inventory Staff, Administrator.'
+      responses:
+        '204':
+          description: Logged out
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /auth/me:
+    get:
+      tags:
+      - Auth
+      summary: Current user profile
+      operationId: getCurrentUser
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: '**Allowed roles:** Requester, Facilities Officer, Technician, Inventory Staff, Administrator.'
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /users:
+    get:
+      tags:
+      - Users
+      summary: List users
+      operationId: listUsers
+      x-roles:
+      - Administrator
+      description: '**Allowed roles:** Administrator.'
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Search full name or email
+      - name: role_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: is_active
+        in: query
+        required: false
+        schema:
+          type: boolean
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Page of users
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Users
+      summary: Create a user
+      operationId: createUser
+      x-roles:
+      - Administrator
+      description: '**Allowed roles:** Administrator.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /users/{userId}:
+    get:
+      tags:
+      - Users
+      summary: Get a user
+      operationId: getUser
+      x-roles:
+      - Administrator
+      description: '**Allowed roles:** Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    patch:
+      tags:
+      - Users
+      summary: Update a user, change role or deactivate
+      operationId: updateUser
+      x-roles:
+      - Administrator
+      description: '**Allowed roles:** Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /technicians:
+    get:
+      tags:
+      - Users
+      summary: List active technicians for assignment
+      operationId: listTechnicians
+      x-roles:
+      - Facilities Officer
+      - Administrator
+      description: 'Convenience lookup of active users with the Technician role, used by the assignment picker.
+
+
+        **Allowed roles:** Facilities Officer, Administrator.'
+      parameters:
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        description: Reference data defaults to 100 per page
+      - $ref: '#/components/parameters/Page'
+      responses:
+        '200':
+          description: Active technicians
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserSummary'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /roles:
+    get:
+      tags:
+      - Users
+      summary: List roles
+      operationId: listRoles
+      x-roles:
+      - Administrator
+      - Facilities Officer
+      description: '**Allowed roles:** Administrator, Facilities Officer.'
+      parameters:
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        description: Reference data defaults to 100 per page
+      - $ref: '#/components/parameters/Page'
+      responses:
+        '200':
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Role'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /categories:
+    get:
+      tags:
+      - Lookups
+      summary: List maintenance categories
+      operationId: listCategories
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: 'Reference data for form dropdowns. Uses the standard paginated envelope; `per_page` defaults
+        to 100.
+
+
+        **Allowed roles:** Requester, Facilities Officer, Technician, Inventory Staff, Administrator.'
+      parameters:
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        description: Reference data defaults to 100 per page
+      - $ref: '#/components/parameters/Page'
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Lookups
+      summary: Create a maintenance category
+      operationId: createCategory
+      x-roles:
+      - Administrator
+      description: '**Allowed roles:** Administrator.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryWrite'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Category'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /categories/{categoryId}:
+    patch:
+      tags:
+      - Lookups
+      summary: Update a maintenance category
+      operationId: updateCategory
+      x-roles:
+      - Administrator
+      description: '**Allowed roles:** Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/CategoryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryWrite'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Category'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      tags:
+      - Lookups
+      summary: Delete a maintenance category
+      operationId: deleteCategory
+      x-roles:
+      - Administrator
+      description: 'Returns 409 if the maintenance category is referenced by existing maintenance requests.
+
+
+        **Allowed roles:** Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/CategoryId'
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /locations:
+    get:
+      tags:
+      - Lookups
+      summary: List locations
+      operationId: listLocations
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: 'Reference data for form dropdowns. Uses the standard paginated envelope; `per_page` defaults
+        to 100.
+
+
+        **Allowed roles:** Requester, Facilities Officer, Technician, Inventory Staff, Administrator.'
+      parameters:
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        description: Reference data defaults to 100 per page
+      - $ref: '#/components/parameters/Page'
+      responses:
+        '200':
+          description: Locations
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Location'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Lookups
+      summary: Create a location
+      operationId: createLocation
+      x-roles:
+      - Administrator
+      description: '**Allowed roles:** Administrator.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationWrite'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Location'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /locations/{locationId}:
+    patch:
+      tags:
+      - Lookups
+      summary: Update a location
+      operationId: updateLocation
+      x-roles:
+      - Administrator
+      description: '**Allowed roles:** Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/LocationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationWrite'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Location'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      tags:
+      - Lookups
+      summary: Delete a location
+      operationId: deleteLocation
+      x-roles:
+      - Administrator
+      description: 'Returns 409 if the location is referenced by existing maintenance requests.
+
+
+        **Allowed roles:** Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/LocationId'
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /lookups/{lookup}:
+    get:
+      tags:
+      - Lookups
+      summary: List a status or type lookup table
+      operationId: getLookup
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: 'Serves `request_statuses`, `job_order_statuses`, `material_request_statuses` and `notification_types`
+        as `{id, label}` rows. Priority is a database ENUM, not a lookup table, so it is not served here; use the
+        enum in the schemas.
+
+
+        **Allowed roles:** Requester, Facilities Officer, Technician, Inventory Staff, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/LookupName'
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        description: Reference data defaults to 100 per page
+      - $ref: '#/components/parameters/Page'
+      responses:
+        '200':
+          description: Lookup rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LookupItem'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /maintenance-requests:
+    get:
+      tags:
+      - Maintenance Requests
+      summary: List maintenance requests
+      operationId: listMaintenanceRequests
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Administrator
+      description: '**Visibility is enforced server-side by role.** Requester: only requests where `requester_id`
+        equals the caller; a `requester_id` filter is ignored and another user''s request id returns 404. Facilities
+        Officer and Administrator: all requests. Technician: only requests linked to job orders they are assigned
+        to. Inventory Staff: no access (403). For the My Requests page use `GET /me/maintenance-requests`.
+
+
+        **Allowed roles:** Requester, Facilities Officer, Technician, Administrator.'
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Matches reference (e.g. MR-0005), location, category or requester name
+      - name: status_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: category_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: location_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: priority
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - Low
+          - Medium
+          - High
+          - Urgent
+      - name: requester_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: submitted_from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: submitted_to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - submitted_at
+          - -submitted_at
+          - priority
+          - -priority
+          default: -submitted_at
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Page of requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MaintenanceRequest'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Maintenance Requests
+      summary: Submit a maintenance request
+      operationId: createMaintenanceRequest
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Administrator
+      description: '`requester_id` is always the authenticated user. `priority` is optional and defaults to Medium
+        (the database default). Attach photos afterwards via the attachments endpoint, or send them in the same
+        call as `multipart/form-data`; see **File uploads**.
+
+
+        **Allowed roles:** Requester, Facilities Officer, Administrator.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceRequestCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MaintenanceRequestCreateMultipart'
+            encoding:
+              files:
+                contentType: image/jpeg, image/png, image/webp, application/pdf
+      responses:
+        '201':
+          description: Created. Status starts as Pending.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /me/maintenance-requests:
+    get:
+      tags:
+      - Maintenance Requests
+      summary: My requests (requester-only)
+      operationId: listMyMaintenanceRequests
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Administrator
+      description: 'Always scoped to `requester_id = current user`, whatever the caller''s role. Use it for the
+        My Requests page and the requester dashboard''s recent requests. Each item includes `requester_id`, `status_id`/`status_label`,
+        `location_id`/`location_label`, `category_id`/`category_label` and `attachment_count`, so the list needs
+        no extra lookups.
+
+
+        **Allowed roles:** Requester, Facilities Officer, Administrator.'
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Matches reference (e.g. MR-0005), location or category
+      - name: status_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: category_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: location_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: priority
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - Low
+          - Medium
+          - High
+          - Urgent
+      - name: submitted_from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: submitted_to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - submitted_at
+          - -submitted_at
+          - priority
+          - -priority
+          default: -submitted_at
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Page of the caller's own requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MaintenanceRequest'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /maintenance-requests/{requestId}:
+    get:
+      tags:
+      - Maintenance Requests
+      summary: Get a maintenance request
+      operationId: getMaintenanceRequest
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Administrator
+      description: '**Allowed roles:** Requester, Facilities Officer, Technician, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Request with attachments and linked job order
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequestDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    patch:
+      tags:
+      - Maintenance Requests
+      summary: Edit a maintenance request
+      operationId: updateMaintenanceRequest
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Administrator
+      description: 'Requesters may edit only their own requests while the status is Pending; otherwise 409.
+
+
+        **Allowed roles:** Requester, Facilities Officer, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceRequestUpdate'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequestDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      tags:
+      - Maintenance Requests
+      summary: Withdraw a maintenance request
+      operationId: deleteMaintenanceRequest
+      x-roles:
+      - Requester
+      - Administrator
+      description: 'Allowed only while Pending and no job order exists; otherwise 409.
+
+
+        **Allowed roles:** Requester, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /maintenance-requests/{requestId}/review:
+    post:
+      tags:
+      - Maintenance Requests
+      summary: Approve or reject a request
+      operationId: reviewMaintenanceRequest
+      x-roles:
+      - Facilities Officer
+      - Administrator
+      description: 'Sets `reviewed_by`/`reviewed_at` and moves status to Approved or Rejected. Only valid while
+        Pending (409 otherwise). The requester is notified; `remarks` is included in the notification message and
+        is not stored separately.
+
+
+        **Allowed roles:** Facilities Officer, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDecision'
+      responses:
+        '200':
+          description: Reviewed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequestDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /maintenance-requests/{requestId}/acknowledge:
+    post:
+      tags:
+      - Maintenance Requests
+      summary: Requester confirms the work is done
+      operationId: acknowledgeMaintenanceRequest
+      x-roles:
+      - Requester
+      description: 'Only the original requester, and only while the request is Completed (409 otherwise, including
+        a second call). In one transaction the linked job order moves Completed → Closed (`closed_at` set) and the
+        request becomes Closed. The Officer who created the job order and its assigned technicians are notified.
+        A single history entry (event `Requester Acknowledgement`, `changed_by` = the requester) is the audit record.
+        See **Closure and acknowledgement**.
+
+
+        **Allowed roles:** Requester.'
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaintenanceRequestDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /maintenance-requests/{requestId}/attachments:
+    get:
+      tags:
+      - Maintenance Requests
+      summary: List request attachments
+      operationId: listRequestAttachments
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Administrator
+      description: '**Allowed roles:** Requester, Facilities Officer, Technician, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Attachments
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attachment'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Maintenance Requests
+      summary: Upload request attachments
+      operationId: uploadRequestAttachments
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Administrator
+      description: 'See **File uploads** for limits and accepted types. The caller must be able to see the request
+        (404 otherwise).
+
+
+        **Allowed roles:** Requester, Facilities Officer, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AttachmentUpload'
+            encoding:
+              files:
+                contentType: image/jpeg, image/png, image/webp, application/pdf
+      responses:
+        '201':
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attachment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /maintenance-requests/{requestId}/attachments/{attachmentId}:
+    delete:
+      tags:
+      - Maintenance Requests
+      summary: Delete a request attachment
+      operationId: deleteRequestAttachment
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Administrator
+      description: 'Uploader, Officers and Administrators only.
+
+
+        **Allowed roles:** Requester, Facilities Officer, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /maintenance-requests/{requestId}/attachments/{attachmentId}/file:
+    get:
+      tags:
+      - Maintenance Requests
+      summary: Download a request attachment
+      operationId: downloadRequestAttachment
+      description: Target of `Attachment.url`. Authorised by the signed URL itself (valid 15 minutes), so no bearer
+        token is needed. An invalid or expired signature returns 403.
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      - $ref: '#/components/parameters/AttachmentId'
+      - name: expires
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: Unix expiry copied from the signed URL
+      - name: signature
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Signature copied from the signed URL
+      responses:
+        '200':
+          description: File bytes
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+      security: []
+  /job-orders:
+    get:
+      tags:
+      - Job Orders
+      summary: List job orders
+      operationId: listJobOrders
+      x-roles:
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: 'Technicians only see job orders they are assigned to.
+
+
+        **Allowed roles:** Facilities Officer, Technician, Inventory Staff, Administrator.'
+      parameters:
+      - name: status_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: priority
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - Low
+          - Medium
+          - High
+          - Urgent
+      - name: technician_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: request_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: mine
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Only job orders assigned to the current user
+      - name: created_from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: created_to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - created_at
+          - -created_at
+          - priority
+          - -priority
+          default: -created_at
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Page of job orders
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JobOrder'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Job Orders
+      summary: Create a job order from an approved request
+      operationId: createJobOrder
+      x-roles:
+      - Facilities Officer
+      - Administrator
+      description: 'The request must be Approved and must not already have a job order (`request_id` is unique on
+        `job_orders`), otherwise 409. If `assignments` are supplied the job order is created as Assigned, otherwise
+        as Approved. `approved_at` is set at creation (the creating officer is the approver); Pending exists in
+        the lookup table but is not an initial state. Writes the first history entry (event `Created`). Assigned
+        technicians are notified.
+
+
+        **Allowed roles:** Facilities Officer, Administrator.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobOrderCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/JobOrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /job-orders/{jobOrderId}:
+    get:
+      tags:
+      - Job Orders
+      summary: Get a job order
+      operationId: getJobOrder
+      x-roles:
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: '**Allowed roles:** Facilities Officer, Technician, Inventory Staff, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      responses:
+        '200':
+          description: Job order with request, assignments and totals
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/JobOrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    patch:
+      tags:
+      - Job Orders
+      summary: Update job order priority
+      operationId: updateJobOrder
+      x-roles:
+      - Facilities Officer
+      - Administrator
+      description: '**Allowed roles:** Facilities Officer, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobOrderUpdate'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/JobOrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /job-orders/{jobOrderId}/transitions:
+    post:
+      tags:
+      - Job Orders
+      summary: Change job order status
+      operationId: transitionJobOrder
+      x-roles:
+      - Facilities Officer
+      - Technician
+      - Administrator
+      description: 'Only the transitions listed in the **Job order status transitions** table (also machine-readable
+        as `x-job-order-transitions`) are accepted; anything else returns 409 with `code: invalid_transition`. Technician
+        transitions require the caller to be the job order''s Lead technician: Support technicians get 403, unassigned
+        technicians 404. Sets `approved_at` / `closed_at` where applicable, mirrors the status onto the linked maintenance
+        request (Assigned keeps the request at Approved), and notifies the requester. Every transition is appended
+        to the job order history (event `Status Change`) with the caller as `changed_by` and `remarks` stored; automatic
+        transitions are attributed to the user whose action triggered them.
+
+
+        **Allowed roles:** Facilities Officer, Technician, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobOrderTransition'
+      responses:
+        '200':
+          description: New state
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/JobOrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /job-orders/{jobOrderId}/history:
+    get:
+      tags:
+      - Job Orders
+      summary: Job order status history (audit trail)
+      operationId: listJobOrderHistory
+      x-roles:
+      - Facilities Officer
+      - Technician
+      - Administrator
+      description: 'Every status change is recorded with who made it, when, and any remarks, including the requester''s
+        acknowledgement. Entries are never edited or deleted. Backed by the `job_order_status_history` table (see
+        **Required model addition**).
+
+
+        **Allowed roles:** Facilities Officer, Technician, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Append-only history, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JobOrderHistoryEntry'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /job-orders/{jobOrderId}/assignments:
+    get:
+      tags:
+      - Job Orders
+      summary: List technicians assigned to a job order
+      operationId: listAssignments
+      x-roles:
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: '**Allowed roles:** Facilities Officer, Technician, Inventory Staff, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Assignments
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Assignment'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Job Orders
+      summary: Assign a technician
+      operationId: createAssignment
+      x-roles:
+      - Facilities Officer
+      - Administrator
+      description: 'Only one Lead per job order. The database has no unique constraint for this, so the API must
+        enforce it (409). Notifies the technician.
+
+
+        **Allowed roles:** Facilities Officer, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignmentCreate'
+      responses:
+        '201':
+          description: Assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Assignment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /job-orders/{jobOrderId}/assignments/{technicianId}:
+    patch:
+      tags:
+      - Job Orders
+      summary: Accept, decline or complete an assignment
+      operationId: updateAssignment
+      x-roles:
+      - Technician
+      - Facilities Officer
+      - Administrator
+      description: 'Technicians may update only their own assignment (Assigned→Accepted/Declined, Accepted→Completed).
+        Officers may set any status.
+
+
+        **Allowed roles:** Technician, Facilities Officer, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      - $ref: '#/components/parameters/TechnicianId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignmentUpdate'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Assignment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      tags:
+      - Job Orders
+      summary: Unassign a technician
+      operationId: deleteAssignment
+      x-roles:
+      - Facilities Officer
+      - Administrator
+      description: '**Allowed roles:** Facilities Officer, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      - $ref: '#/components/parameters/TechnicianId'
+      responses:
+        '204':
+          description: Removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /job-orders/{jobOrderId}/work-records:
+    get:
+      tags:
+      - Job Orders
+      summary: List work records
+      operationId: listWorkRecords
+      x-roles:
+      - Facilities Officer
+      - Technician
+      - Administrator
+      description: '**Allowed roles:** Facilities Officer, Technician, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Work records
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkRecord'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Job Orders
+      summary: Record work performed
+      operationId: createWorkRecord
+      x-roles:
+      - Technician
+      description: 'Technician must be assigned to the job order and it must be In Progress; otherwise 409.
+
+
+        **Allowed roles:** Technician.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkRecordCreate'
+      responses:
+        '201':
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WorkRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /job-orders/{jobOrderId}/materials:
+    get:
+      tags:
+      - Job Orders
+      summary: List materials used
+      operationId: listJobOrderMaterials
+      x-roles:
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: '**Allowed roles:** Facilities Officer, Technician, Inventory Staff, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Materials used
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JobOrderMaterial'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Job Orders
+      summary: Record material used
+      operationId: createJobOrderMaterial
+      x-roles:
+      - Technician
+      - Facilities Officer
+      description: 'Deducts `quantity_used` from `materials.current_stock` and snapshots `unit_cost_at_use`. Returns
+        422 if stock is insufficient. `job_order_materials` is keyed on (job_order_id, material_id), so recording
+        a material that is already on the job order adds to the existing row''s quantity. Returns 409 if the job
+        order is not In Progress.
+
+
+        **Allowed roles:** Technician, Facilities Officer.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobOrderMaterialCreate'
+      responses:
+        '201':
+          description: Recorded; stock deducted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/JobOrderMaterial'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /job-orders/{jobOrderId}/attachments:
+    get:
+      tags:
+      - Job Orders
+      summary: List job order attachments
+      operationId: listJobOrderAttachments
+      x-roles:
+      - Facilities Officer
+      - Technician
+      - Administrator
+      description: '**Allowed roles:** Facilities Officer, Technician, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Attachments
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attachment'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Job Orders
+      summary: Upload completion photos or documents
+      operationId: uploadJobOrderAttachments
+      x-roles:
+      - Technician
+      - Facilities Officer
+      description: 'See **File uploads**. Assigned technicians (Lead or Support) and Officers may upload.
+
+
+        **Allowed roles:** Technician, Facilities Officer.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AttachmentUpload'
+            encoding:
+              files:
+                contentType: image/jpeg, image/png, image/webp, application/pdf
+      responses:
+        '201':
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attachment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /job-orders/{jobOrderId}/attachments/{attachmentId}:
+    delete:
+      tags:
+      - Job Orders
+      summary: Delete a job order attachment
+      operationId: deleteJobOrderAttachment
+      x-roles:
+      - Technician
+      - Facilities Officer
+      - Administrator
+      description: '**Allowed roles:** Technician, Facilities Officer, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /job-orders/{jobOrderId}/attachments/{attachmentId}/file:
+    get:
+      tags:
+      - Job Orders
+      summary: Download a job order attachment
+      operationId: downloadJobOrderAttachment
+      description: Target of `Attachment.url`. Authorised by the signed URL itself (valid 15 minutes), so no bearer
+        token is needed. An invalid or expired signature returns 403.
+      parameters:
+      - $ref: '#/components/parameters/JobOrderId'
+      - $ref: '#/components/parameters/AttachmentId'
+      - name: expires
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: Unix expiry copied from the signed URL
+      - name: signature
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Signature copied from the signed URL
+      responses:
+        '200':
+          description: File bytes
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+      security: []
+  /materials:
+    get:
+      tags:
+      - Materials & Inventory
+      summary: List materials
+      operationId: listMaterials
+      x-roles:
+      - Inventory Staff
+      - Facilities Officer
+      - Technician
+      - Administrator
+      description: '**Allowed roles:** Inventory Staff, Facilities Officer, Technician, Administrator.'
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Search name or SKU
+      - name: is_low_stock
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Only items where current_stock <= reorder_level
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Page of materials
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Material'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Materials & Inventory
+      summary: Add a material
+      operationId: createMaterial
+      x-roles:
+      - Inventory Staff
+      - Administrator
+      description: '`sku` must be unique.
+
+
+        **Allowed roles:** Inventory Staff, Administrator.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterialCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Material'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /materials/{materialId}:
+    get:
+      tags:
+      - Materials & Inventory
+      summary: Get a material
+      operationId: getMaterial
+      x-roles:
+      - Inventory Staff
+      - Facilities Officer
+      - Technician
+      - Administrator
+      description: '**Allowed roles:** Inventory Staff, Facilities Officer, Technician, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/MaterialId'
+      responses:
+        '200':
+          description: Material
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Material'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    patch:
+      tags:
+      - Materials & Inventory
+      summary: Update a material
+      operationId: updateMaterial
+      x-roles:
+      - Inventory Staff
+      - Administrator
+      description: '**Allowed roles:** Inventory Staff, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/MaterialId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterialUpdate'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Material'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /materials/{materialId}/stock-adjustments:
+    post:
+      tags:
+      - Materials & Inventory
+      summary: Adjust stock level
+      operationId: adjustMaterialStock
+      x-roles:
+      - Inventory Staff
+      - Administrator
+      description: 'Applies a positive (restock) or negative (correction) delta to `current_stock`. Rejects results
+        below zero with 422.
+
+
+        **Allowed roles:** Inventory Staff, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/MaterialId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockAdjustment'
+      responses:
+        '200':
+          description: Stock updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Material'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /material-requests:
+    get:
+      tags:
+      - Materials & Inventory
+      summary: List material requests
+      operationId: listMaterialRequests
+      x-roles:
+      - Inventory Staff
+      - Facilities Officer
+      - Technician
+      - Administrator
+      description: 'Technicians see only their own requests.
+
+
+        **Allowed roles:** Inventory Staff, Facilities Officer, Technician, Administrator.'
+      parameters:
+      - name: status_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: material_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - name: requested_by
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Page of material requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MaterialRequest'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+      - Materials & Inventory
+      summary: Request materials
+      operationId: createMaterialRequest
+      x-roles:
+      - Technician
+      - Facilities Officer
+      description: 'Notifies Inventory Staff.
+
+
+        **Allowed roles:** Technician, Facilities Officer.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterialRequestCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaterialRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /material-requests/{materialRequestId}:
+    get:
+      tags:
+      - Materials & Inventory
+      summary: Get a material request
+      operationId: getMaterialRequest
+      x-roles:
+      - Inventory Staff
+      - Facilities Officer
+      - Technician
+      - Administrator
+      description: '**Allowed roles:** Inventory Staff, Facilities Officer, Technician, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/MaterialRequestId'
+      responses:
+        '200':
+          description: Material request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaterialRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /material-requests/{materialRequestId}/fulfill:
+    post:
+      tags:
+      - Materials & Inventory
+      summary: Fulfil a material request
+      operationId: fulfillMaterialRequest
+      x-roles:
+      - Inventory Staff
+      description: 'Sets `fulfilled_by` / `fulfilled_at` and the Fulfilled status. Only valid while the request
+        is open (409 otherwise).
+
+
+        **Allowed roles:** Inventory Staff.'
+      parameters:
+      - $ref: '#/components/parameters/MaterialRequestId'
+      responses:
+        '200':
+          description: Fulfilled
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaterialRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /material-requests/{materialRequestId}/reject:
+    post:
+      tags:
+      - Materials & Inventory
+      summary: Reject a material request
+      operationId: rejectMaterialRequest
+      x-roles:
+      - Inventory Staff
+      description: '**Allowed roles:** Inventory Staff.'
+      parameters:
+      - $ref: '#/components/parameters/MaterialRequestId'
+      responses:
+        '200':
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MaterialRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /notifications:
+    get:
+      tags:
+      - Notifications
+      summary: List my notifications
+      operationId: listNotifications
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: '**Allowed roles:** Requester, Facilities Officer, Technician, Inventory Staff, Administrator.'
+      parameters:
+      - name: is_read
+        in: query
+        required: false
+        schema:
+          type: boolean
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Page of notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /notifications/{notificationId}/read:
+    post:
+      tags:
+      - Notifications
+      summary: Mark a notification as read
+      operationId: markNotificationRead
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: '**Allowed roles:** Requester, Facilities Officer, Technician, Inventory Staff, Administrator.'
+      parameters:
+      - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /notifications/read-all:
+    post:
+      tags:
+      - Notifications
+      summary: Mark all my notifications as read
+      operationId: markAllNotificationsRead
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: '**Allowed roles:** Requester, Facilities Officer, Technician, Inventory Staff, Administrator.'
+      responses:
+        '204':
+          description: Done
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /dashboard/summary:
+    get:
+      tags:
+      - Dashboard & Reports
+      summary: Role-aware dashboard counters
+      operationId: getDashboardSummary
+      x-roles:
+      - Requester
+      - Facilities Officer
+      - Technician
+      - Inventory Staff
+      - Administrator
+      description: 'Returns only the blocks relevant to the caller''s role: Requester → `requester`; Facilities
+        Officer and Administrator → `facilities` (and `inventory`); Technician → `technician`; Inventory Staff →
+        `inventory`.
+
+
+        **Allowed roles:** Requester, Facilities Officer, Technician, Inventory Staff, Administrator.'
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DashboardSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /reports/maintenance-activity:
+    get:
+      tags:
+      - Dashboard & Reports
+      summary: Maintenance activity grouped by dimension
+      operationId: getMaintenanceActivityReport
+      x-roles:
+      - Facilities Officer
+      - Administrator
+      description: '**Allowed roles:** Facilities Officer, Administrator.'
+      parameters:
+      - name: group_by
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - category
+          - location
+          - technician
+          - month
+        description: Required
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: Report rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /reports/recurring-issues:
+    get:
+      tags:
+      - Dashboard & Reports
+      summary: Frequently recurring problems
+      operationId: getRecurringIssuesReport
+      x-roles:
+      - Facilities Officer
+      - Administrator
+      description: '**Allowed roles:** Facilities Officer, Administrator.'
+      parameters:
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: min_count
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 2
+          default: 3
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Location and category pairs ranked by request count
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RecurringIssue'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/ServerError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Sanctum personal access token
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PerPage:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 15
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: User id
+      schema:
+        type: integer
+        minimum: 1
+    CategoryId:
+      name: categoryId
+      in: path
+      required: true
+      description: Category id
+      schema:
+        type: integer
+        minimum: 1
+    LocationId:
+      name: locationId
+      in: path
+      required: true
+      description: Location id
+      schema:
+        type: integer
+        minimum: 1
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      description: Maintenance request id (`request_id`, not the `MR-` reference)
+      schema:
+        type: integer
+        minimum: 1
+    JobOrderId:
+      name: jobOrderId
+      in: path
+      required: true
+      description: Job order id
+      schema:
+        type: integer
+        minimum: 1
+    TechnicianId:
+      name: technicianId
+      in: path
+      required: true
+      description: User id of the technician
+      schema:
+        type: integer
+        minimum: 1
+    AttachmentId:
+      name: attachmentId
+      in: path
+      required: true
+      description: Attachment id
+      schema:
+        type: integer
+        minimum: 1
+    MaterialId:
+      name: materialId
+      in: path
+      required: true
+      description: Material id
+      schema:
+        type: integer
+        minimum: 1
+    MaterialRequestId:
+      name: materialRequestId
+      in: path
+      required: true
+      description: Material request id
+      schema:
+        type: integer
+        minimum: 1
+    NotificationId:
+      name: notificationId
+      in: path
+      required: true
+      description: Notification id
+      schema:
+        type: integer
+        minimum: 1
+    LookupName:
+      name: lookup
+      in: path
+      required: true
+      description: Lookup table
+      schema:
+        type: string
+        enum:
+        - request_statuses
+        - job_order_statuses
+        - material_request_statuses
+        - notification_types
+  responses:
+    Unauthorized:
+      description: Missing, invalid or expired token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Authenticated, but the user's role may not perform this action (or access this record)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found, or not visible to the caller
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Request conflicts with the current state of the resource (invalid status transition, duplicate,
+        in-use record)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+    TooManyRequests:
+      description: Too many attempts; see the `Retry-After` header
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    PayloadTooLarge:
+      description: Upload exceeds the web server size limit (see File uploads)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServerError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    PageMeta:
+      type: object
+      properties:
+        current_page:
+          type: integer
+          minimum: 1
+        per_page:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+        last_page:
+          type: integer
+          minimum: 1
+        from:
+          oneOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+        to:
+          oneOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+      required:
+      - current_page
+      - per_page
+      - total
+      - last_page
+      - from
+      - to
+      description: Identical on every list endpoint. `from`/`to` are 1-based row positions, null when the page is
+        empty.
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+          enum:
+          - unauthenticated
+          - forbidden
+          - not_found
+          - conflict
+          - invalid_transition
+          - payload_too_large
+          - validation_failed
+          - too_many_requests
+          - server_error
+          description: Stable machine-readable reason; clients branch on this, not on `message`.
+      required:
+      - message
+      - code
+    ValidationError:
+      allOf:
+      - $ref: '#/components/schemas/Error'
+      - type: object
+        properties:
+          code:
+            const: validation_failed
+          errors:
+            type: object
+            additionalProperties:
+              type: array
+              items:
+                type: string
+        required:
+        - errors
+    LookupItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        label:
+          type: string
+      required:
+      - id
+      - label
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        device_name:
+          type: string
+          maxLength: 100
+          description: Label for the token, e.g. `web`
+      required:
+      - email
+      - password
+    AuthToken:
+      type: object
+      properties:
+        token:
+          type: string
+        token_type:
+          type: string
+          enum:
+          - Bearer
+        user:
+          $ref: '#/components/schemas/User'
+      required:
+      - token
+      - token_type
+      - user
+    Role:
+      type: object
+      properties:
+        role_id:
+          type: integer
+          minimum: 1
+        role_name:
+          type: string
+          enum:
+          - Requester
+          - Facilities Officer
+          - Technician
+          - Inventory Staff
+          - Administrator
+        description:
+          oneOf:
+          - type: string
+            maxLength: 255
+          - type: 'null'
+      required:
+      - role_id
+      - role_name
+      x-table: roles
+    UserSummary:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          minimum: 1
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+      required:
+      - user_id
+      - full_name
+      x-table: users
+    User:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          minimum: 1
+        role:
+          $ref: '#/components/schemas/Role'
+        full_name:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 100
+        phone_number:
+          oneOf:
+          - type: string
+            maxLength: 20
+          - type: 'null'
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - user_id
+      - role
+      - full_name
+      - email
+      - is_active
+      - created_at
+      x-table: users
+    UserCreate:
+      type: object
+      properties:
+        role_id:
+          type: integer
+          minimum: 1
+        full_name:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 100
+        password:
+          type: string
+          format: password
+          minLength: 8
+        phone_number:
+          type: string
+          maxLength: 20
+        is_active:
+          type: boolean
+          default: true
+      required:
+      - role_id
+      - full_name
+      - email
+      - password
+    UserUpdate:
+      type: object
+      properties:
+        role_id:
+          type: integer
+          minimum: 1
+        full_name:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 100
+        password:
+          type: string
+          format: password
+          minLength: 8
+        phone_number:
+          type: string
+          maxLength: 20
+        is_active:
+          type: boolean
+    Category:
+      type: object
+      properties:
+        category_id:
+          type: integer
+          minimum: 1
+        category_name:
+          type: string
+          maxLength: 50
+        description:
+          oneOf:
+          - type: string
+            maxLength: 255
+          - type: 'null'
+      required:
+      - category_id
+      - category_name
+      x-table: maintenance_categories
+    CategoryWrite:
+      type: object
+      properties:
+        category_name:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          maxLength: 255
+      required:
+      - category_name
+    Location:
+      type: object
+      properties:
+        location_id:
+          type: integer
+          minimum: 1
+        building_name:
+          type: string
+          maxLength: 100
+        floor:
+          oneOf:
+          - type: string
+            maxLength: 20
+          - type: 'null'
+        room_number:
+          oneOf:
+          - type: string
+            maxLength: 20
+          - type: 'null'
+        description:
+          oneOf:
+          - type: string
+            maxLength: 255
+          - type: 'null'
+      required:
+      - location_id
+      - building_name
+      x-table: locations
+    LocationWrite:
+      type: object
+      properties:
+        building_name:
+          type: string
+          maxLength: 100
+        floor:
+          type: string
+          maxLength: 20
+        room_number:
+          type: string
+          maxLength: 20
+        description:
+          type: string
+          maxLength: 255
+      required:
+      - building_name
+    Attachment:
+      type: object
+      properties:
+        attachment_id:
+          type: integer
+          minimum: 1
+        file_name:
+          type: string
+          description: Original file name, recovered from the stored path; not a database column
+        url:
+          type: string
+          format: uri
+          description: Temporary signed URL (15 minutes) to the `.../file` endpoint
+        mime_type:
+          type: string
+          enum:
+          - image/jpeg
+          - image/png
+          - image/webp
+          - application/pdf
+          description: Derived from the stored file; not a database column
+        size_bytes:
+          type: integer
+          maximum: 5242880
+          description: Derived from the stored file; not a database column
+        uploaded_by:
+          $ref: '#/components/schemas/UserSummary'
+        uploaded_at:
+          type: string
+          format: date-time
+      required:
+      - attachment_id
+      - file_name
+      - url
+      - mime_type
+      - size_bytes
+      - uploaded_by
+      - uploaded_at
+      x-table: request_attachments | job_order_attachments
+    UploadFiles:
+      type: array
+      maxItems: 5
+      description: Shared by every multipart endpoint. At most 5 files per call; the rules in **File uploads** (5
+        MB each, JPEG/PNG/WebP/PDF, 10 per record) apply and are enforced by the backend.
+      items:
+        type: string
+        format: binary
+        description: JPEG, PNG, WebP or PDF; max 5 MB (5,242,880 bytes)
+    AttachmentUpload:
+      type: object
+      properties:
+        files:
+          allOf:
+          - $ref: '#/components/schemas/UploadFiles'
+          minItems: 1
+      required:
+      - files
+    MaintenanceRequest:
+      type: object
+      properties:
+        request_id:
+          type: integer
+          minimum: 1
+        reference:
+          type: string
+          pattern: ^MR-\d{4,}$
+          description: Display id used in the UI, e.g. `MR-0005`; derived from `request_id`.
+        requester_id:
+          type: integer
+          minimum: 1
+        requester_name:
+          type: string
+        category_id:
+          type: integer
+          minimum: 1
+        category_label:
+          type: string
+          description: '`maintenance_categories.category_name`, e.g. `Electrical`'
+        location_id:
+          type: integer
+          minimum: 1
+        location_label:
+          type: string
+          description: Display string built from the location row, e.g. `Main Building, 2F, Room 204`
+        status_id:
+          type: integer
+          minimum: 1
+        status_label:
+          type: string
+          enum:
+          - Pending
+          - Approved
+          - Rejected
+          - In Progress
+          - On Hold
+          - Completed
+          - Closed
+          description: '`request_statuses.status_name`'
+        description:
+          type: string
+        priority:
+          type: string
+          enum:
+          - Low
+          - Medium
+          - High
+          - Urgent
+        submitted_at:
+          type: string
+          format: date-time
+        reviewed_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        attachment_count:
+          type: integer
+          minimum: 0
+        job_order_id:
+          oneOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+      required:
+      - request_id
+      - reference
+      - requester_id
+      - requester_name
+      - category_id
+      - category_label
+      - location_id
+      - location_label
+      - status_id
+      - status_label
+      - description
+      - priority
+      - submitted_at
+      - attachment_count
+      x-table: maintenance_requests
+    MaintenanceRequestDetail:
+      allOf:
+      - $ref: '#/components/schemas/MaintenanceRequest'
+      - type: object
+        properties:
+          requester:
+            $ref: '#/components/schemas/UserSummary'
+          location:
+            $ref: '#/components/schemas/Location'
+          category:
+            $ref: '#/components/schemas/Category'
+          reviewed_by:
+            oneOf:
+            - $ref: '#/components/schemas/UserSummary'
+            - type: 'null'
+          attachments:
+            type: array
+            items:
+              $ref: '#/components/schemas/Attachment'
+          job_order:
+            oneOf:
+            - $ref: '#/components/schemas/JobOrderSummary'
+            - type: 'null'
+      x-table: maintenance_requests
+    MaintenanceRequestCreate:
+      type: object
+      properties:
+        location_id:
+          type: integer
+          minimum: 1
+        category_id:
+          type: integer
+          minimum: 1
+        description:
+          type: string
+          minLength: 10
+          maxLength: 5000
+        priority:
+          type: string
+          enum:
+          - Low
+          - Medium
+          - High
+          - Urgent
+          default: Medium
+      required:
+      - location_id
+      - category_id
+      - description
+    MaintenanceRequestCreateMultipart:
+      type: object
+      properties:
+        location_id:
+          type: integer
+          minimum: 1
+        category_id:
+          type: integer
+          minimum: 1
+        description:
+          type: string
+          minLength: 10
+          maxLength: 5000
+        priority:
+          type: string
+          enum:
+          - Low
+          - Medium
+          - High
+          - Urgent
+        files:
+          allOf:
+          - $ref: '#/components/schemas/UploadFiles'
+          description: Optional; same limits as `AttachmentUpload`
+      required:
+      - location_id
+      - category_id
+      - description
+    MaintenanceRequestUpdate:
+      type: object
+      properties:
+        location_id:
+          type: integer
+          minimum: 1
+        category_id:
+          type: integer
+          minimum: 1
+        description:
+          type: string
+          minLength: 10
+          maxLength: 5000
+        priority:
+          type: string
+          enum:
+          - Low
+          - Medium
+          - High
+          - Urgent
+    ReviewDecision:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum:
+          - approve
+          - reject
+        remarks:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Required when `decision` is `reject`
+      required:
+      - decision
+      if:
+        properties:
+          decision:
+            const: reject
+        required:
+        - decision
+      then:
+        required:
+        - remarks
+    JobOrderSummary:
+      type: object
+      properties:
+        job_order_id:
+          type: integer
+          minimum: 1
+        status_label:
+          type: string
+          enum:
+          - Pending
+          - Approved
+          - Assigned
+          - In Progress
+          - On Hold
+          - Completed
+          - Closed
+        priority:
+          type: string
+          enum:
+          - Low
+          - Medium
+          - High
+          - Urgent
+      required:
+      - job_order_id
+      - status_label
+      - priority
+      x-table: job_orders
+    JobOrder:
+      type: object
+      properties:
+        job_order_id:
+          type: integer
+          minimum: 1
+        request_id:
+          type: integer
+          minimum: 1
+        request_reference:
+          type: string
+        category_id:
+          type: integer
+          minimum: 1
+        category_label:
+          type: string
+        location_id:
+          type: integer
+          minimum: 1
+        location_label:
+          type: string
+        created_by:
+          $ref: '#/components/schemas/UserSummary'
+        status_id:
+          type: integer
+          minimum: 1
+        status_label:
+          type: string
+          enum:
+          - Pending
+          - Approved
+          - Assigned
+          - In Progress
+          - On Hold
+          - Completed
+          - Closed
+        priority:
+          type: string
+          enum:
+          - Low
+          - Medium
+          - High
+          - Urgent
+        created_at:
+          type: string
+          format: date-time
+        approved_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        closed_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        technicians:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSummary'
+      required:
+      - job_order_id
+      - request_id
+      - request_reference
+      - created_by
+      - status_id
+      - status_label
+      - priority
+      - created_at
+      x-table: job_orders
+    JobOrderDetail:
+      allOf:
+      - $ref: '#/components/schemas/JobOrder'
+      - type: object
+        properties:
+          request:
+            $ref: '#/components/schemas/MaintenanceRequest'
+          assignments:
+            type: array
+            items:
+              $ref: '#/components/schemas/Assignment'
+          total_hours_spent:
+            type: number
+          total_material_cost:
+            type: number
+          closed_by:
+            oneOf:
+            - $ref: '#/components/schemas/UserSummary'
+            - type: 'null'
+            description: Who closed the job order; derived from the history entry that moved it to Closed
+          acknowledged_by:
+            oneOf:
+            - $ref: '#/components/schemas/UserSummary'
+            - type: 'null'
+            description: The requester who acknowledged completion; null if an Officer closed it or it is still
+              open
+          acknowledged_at:
+            oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+            description: Derived from the `Requester Acknowledgement` history entry
+      x-table: job_orders
+    JobOrderCreate:
+      type: object
+      properties:
+        request_id:
+          type: integer
+          minimum: 1
+        priority:
+          type: string
+          enum:
+          - Low
+          - Medium
+          - High
+          - Urgent
+          description: Defaults to the request's priority
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssignmentCreate'
+          description: Optional initial assignments
+      required:
+      - request_id
+    JobOrderUpdate:
+      type: object
+      properties:
+        priority:
+          type: string
+          enum:
+          - Low
+          - Medium
+          - High
+          - Urgent
+      required:
+      - priority
+    JobOrderTransition:
+      type: object
+      properties:
+        status_label:
+          type: string
+          enum:
+          - Pending
+          - Approved
+          - Assigned
+          - In Progress
+          - On Hold
+          - Completed
+          - Closed
+          description: Target status
+        remarks:
+          type: string
+          maxLength: 255
+      required:
+      - status_label
+    JobOrderHistoryEntry:
+      type: object
+      properties:
+        history_id:
+          type: integer
+          minimum: 1
+        job_order_id:
+          type: integer
+          minimum: 1
+        from_status_id:
+          oneOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+        from_status_label:
+          oneOf:
+          - type: string
+            enum:
+            - Pending
+            - Approved
+            - Assigned
+            - In Progress
+            - On Hold
+            - Completed
+            - Closed
+          - type: 'null'
+        to_status_id:
+          type: integer
+          minimum: 1
+        to_status_label:
+          type: string
+          enum:
+          - Pending
+          - Approved
+          - Assigned
+          - In Progress
+          - On Hold
+          - Completed
+          - Closed
+        event:
+          type: string
+          enum:
+          - Created
+          - Status Change
+          - Requester Acknowledgement
+          description: '`Created` has no from-status; `Requester Acknowledgement` is the requester closing the job
+            order'
+        changed_by:
+          $ref: '#/components/schemas/UserSummary'
+        changed_at:
+          type: string
+          format: date-time
+        remarks:
+          oneOf:
+          - type: string
+            maxLength: 255
+          - type: 'null'
+      required:
+      - history_id
+      - job_order_id
+      - from_status_id
+      - from_status_label
+      - to_status_id
+      - to_status_label
+      - event
+      - changed_by
+      - changed_at
+      - remarks
+      x-table: job_order_status_history (new)
+    Assignment:
+      type: object
+      properties:
+        job_order_id:
+          type: integer
+          minimum: 1
+        technician:
+          $ref: '#/components/schemas/UserSummary'
+        assigned_by:
+          $ref: '#/components/schemas/UserSummary'
+        assigned_at:
+          type: string
+          format: date-time
+        assignment_role:
+          type: string
+          enum:
+          - Lead
+          - Support
+        assignment_status:
+          type: string
+          enum:
+          - Assigned
+          - Accepted
+          - Declined
+          - Completed
+      required:
+      - job_order_id
+      - technician
+      - assigned_by
+      - assigned_at
+      - assignment_role
+      - assignment_status
+      x-table: job_assignments
+    AssignmentCreate:
+      type: object
+      properties:
+        technician_id:
+          type: integer
+          minimum: 1
+        assignment_role:
+          type: string
+          enum:
+          - Lead
+          - Support
+          default: Lead
+      required:
+      - technician_id
+    AssignmentUpdate:
+      type: object
+      properties:
+        assignment_status:
+          type: string
+          enum:
+          - Accepted
+          - Declined
+          - Completed
+          - Assigned
+        assignment_role:
+          type: string
+          enum:
+          - Lead
+          - Support
+          description: Officers only
+    WorkRecord:
+      type: object
+      properties:
+        work_record_id:
+          type: integer
+          minimum: 1
+        job_order_id:
+          type: integer
+          minimum: 1
+        technician:
+          $ref: '#/components/schemas/UserSummary'
+        work_date:
+          type: string
+          format: date
+        hours_spent:
+          type: number
+          minimum: 0
+          maximum: 999.99
+        work_description:
+          type: string
+        recorded_at:
+          type: string
+          format: date-time
+      required:
+      - work_record_id
+      - job_order_id
+      - technician
+      - work_date
+      - hours_spent
+      - work_description
+      - recorded_at
+      x-table: work_records
+    WorkRecordCreate:
+      type: object
+      properties:
+        work_date:
+          type: string
+          format: date
+        hours_spent:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 999.99
+        work_description:
+          type: string
+          minLength: 5
+      required:
+      - work_date
+      - hours_spent
+      - work_description
+    Material:
+      type: object
+      properties:
+        material_id:
+          type: integer
+          minimum: 1
+        material_name:
+          type: string
+          maxLength: 100
+        sku:
+          type: string
+          maxLength: 50
+        unit_of_measure:
+          type: string
+          maxLength: 20
+        unit_cost:
+          type: number
+          minimum: 0
+        current_stock:
+          type: integer
+          minimum: 0
+        reorder_level:
+          type: integer
+          minimum: 0
+        is_low_stock:
+          type: boolean
+          description: 'Derived: current_stock <= reorder_level'
+      required:
+      - material_id
+      - material_name
+      - sku
+      - unit_of_measure
+      - unit_cost
+      - current_stock
+      - reorder_level
+      - is_low_stock
+      x-table: materials
+    MaterialCreate:
+      type: object
+      properties:
+        material_name:
+          type: string
+          maxLength: 100
+        sku:
+          type: string
+          maxLength: 50
+        unit_of_measure:
+          type: string
+          maxLength: 20
+        unit_cost:
+          type: number
+          minimum: 0
+        current_stock:
+          type: integer
+          minimum: 0
+          default: 0
+        reorder_level:
+          type: integer
+          minimum: 0
+          default: 0
+      required:
+      - material_name
+      - sku
+      - unit_of_measure
+      - unit_cost
+    MaterialUpdate:
+      type: object
+      properties:
+        material_name:
+          type: string
+          maxLength: 100
+        sku:
+          type: string
+          maxLength: 50
+        unit_of_measure:
+          type: string
+          maxLength: 20
+        unit_cost:
+          type: number
+          minimum: 0
+        reorder_level:
+          type: integer
+          minimum: 0
+      description: '`current_stock` is changed only through stock adjustments, job order usage and fulfilled material
+        requests.'
+    StockAdjustment:
+      type: object
+      properties:
+        quantity_delta:
+          type: integer
+          description: Non-zero. Positive restocks, negative corrects.
+        reason:
+          type: string
+          maxLength: 255
+      required:
+      - quantity_delta
+      - reason
+    JobOrderMaterial:
+      type: object
+      properties:
+        job_order_id:
+          type: integer
+          minimum: 1
+        material:
+          $ref: '#/components/schemas/Material'
+        quantity_used:
+          type: number
+          minimum: 0
+        unit_cost_at_use:
+          type: number
+          minimum: 0
+        recorded_by:
+          $ref: '#/components/schemas/UserSummary'
+        recorded_at:
+          type: string
+          format: date-time
+      required:
+      - job_order_id
+      - material
+      - quantity_used
+      - unit_cost_at_use
+      - recorded_by
+      - recorded_at
+      x-table: job_order_materials
+    JobOrderMaterialCreate:
+      type: object
+      properties:
+        material_id:
+          type: integer
+          minimum: 1
+        quantity_used:
+          type: number
+          exclusiveMinimum: 0
+      required:
+      - material_id
+      - quantity_used
+    MaterialRequest:
+      type: object
+      properties:
+        material_request_id:
+          type: integer
+          minimum: 1
+        material:
+          $ref: '#/components/schemas/Material'
+        requested_by:
+          $ref: '#/components/schemas/UserSummary'
+        quantity_requested:
+          type: number
+          exclusiveMinimum: 0
+        status_id:
+          type: integer
+          minimum: 1
+        status_label:
+          type: string
+          enum:
+          - Pending
+          - Fulfilled
+          - Rejected
+        requested_at:
+          type: string
+          format: date-time
+        fulfilled_by:
+          oneOf:
+          - $ref: '#/components/schemas/UserSummary'
+          - type: 'null'
+        fulfilled_at:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+      required:
+      - material_request_id
+      - material
+      - requested_by
+      - quantity_requested
+      - status_id
+      - status_label
+      - requested_at
+      x-table: material_requests
+    MaterialRequestCreate:
+      type: object
+      properties:
+        material_id:
+          type: integer
+          minimum: 1
+        quantity_requested:
+          type: number
+          exclusiveMinimum: 0
+      required:
+      - material_id
+      - quantity_requested
+    Notification:
+      type: object
+      properties:
+        notification_id:
+          type: integer
+          minimum: 1
+        type_id:
+          type: integer
+          minimum: 1
+        type_label:
+          type: string
+          enum:
+          - New Request
+          - Request Status Changed
+          - Job Assigned
+          - Material Request
+          - Material Request Update
+          - Low Stock
+        message:
+          type: string
+          maxLength: 255
+        related_job_order_id:
+          oneOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          description: 'Null for request-level events (new request, Approved, Rejected): the ERD links notifications
+            to job orders only'
+        is_read:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - notification_id
+      - type_id
+      - type_label
+      - message
+      - is_read
+      - created_at
+      x-table: notifications
+    NotificationPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        meta:
+          allOf:
+          - $ref: '#/components/schemas/PageMeta'
+          - type: object
+            properties:
+              unread_count:
+                type: integer
+                minimum: 0
+            required:
+            - unread_count
+      required:
+      - data
+      - meta
+    DashboardSummary:
+      type: object
+      properties:
+        requester:
+          type: object
+          properties:
+            total_requests:
+              type: integer
+            in_progress_requests:
+              type: integer
+            completed_requests:
+              type: integer
+            recent_requests:
+              type: array
+              maxItems: 3
+              items:
+                $ref: '#/components/schemas/MaintenanceRequest'
+        facilities:
+          type: object
+          properties:
+            pending_requests:
+              type: integer
+            high_priority_requests:
+              type: integer
+              description: Open requests (not Rejected or Closed) with priority High or Urgent
+            active_job_orders:
+              type: integer
+              description: Approved, Assigned, In Progress or On Hold
+            completed_job_orders:
+              type: integer
+              description: Completed or Closed
+        technician:
+          type: object
+          properties:
+            assigned_jobs:
+              type: integer
+            awaiting_acceptance:
+              type: integer
+            in_progress_jobs:
+              type: integer
+            completed_this_month:
+              type: integer
+        inventory:
+          type: object
+          properties:
+            low_stock_materials:
+              type: integer
+            open_material_requests:
+              type: integer
+      description: Only the blocks relevant to the caller's role are present.
+    ActivityReport:
+      type: object
+      properties:
+        group_by:
+          type: string
+        date_from:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        date_to:
+          oneOf:
+          - type: string
+            format: date
+          - type: 'null'
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              requests:
+                type: integer
+              job_orders:
+                type: integer
+              completed:
+                type: integer
+              total_hours:
+                type: number
+              avg_resolution_hours:
+                oneOf:
+                - type: number
+                - type: 'null'
+                description: Hours from `approved_at` to `closed_at`; the model has no `completed_at`. Null while
+                  open.
+            required:
+            - key
+            - label
+            - requests
+            - job_orders
+            - completed
+      required:
+      - group_by
+      - rows
+    RecurringIssue:
+      type: object
+      properties:
+        location:
+          $ref: '#/components/schemas/Location'
+        category:
+          $ref: '#/components/schemas/Category'
+        request_count:
+          type: integer
+        last_submitted_at:
+          type: string
+          format: date-time
+      required:
+      - location
+      - category
+      - request_count
+x-seed-data:
+  roles:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  request_statuses:
+  - Pending
+  - Approved
+  - Rejected
+  - In Progress
+  - On Hold
+  - Completed
+  - Closed
+  job_order_statuses:
+  - Pending
+  - Approved
+  - Assigned
+  - In Progress
+  - On Hold
+  - Completed
+  - Closed
+  material_request_statuses:
+  - Pending
+  - Fulfilled
+  - Rejected
+  notification_types:
+  - New Request
+  - Request Status Changed
+  - Job Assigned
+  - Material Request
+  - Material Request Update
+  - Low Stock
+x-job-order-transitions:
+- from: Approved
+  to: Assigned
+  roles:
+  - Facilities Officer
+  - Administrator
+  note: Manual, or automatic when the first technician is assigned
+- from: Assigned
+  to: Approved
+  roles:
+  - system
+  note: Automatic when no active technician remains (all unassigned or declined)
+- from: Assigned
+  to: In Progress
+  roles:
+  - Technician
+  note: Lead technician starts work
+- from: In Progress
+  to: On Hold
+  roles:
+  - Technician
+  - Facilities Officer
+  - Administrator
+  note: Lead technician or Officer
+- from: On Hold
+  to: In Progress
+  roles:
+  - Technician
+  - Facilities Officer
+  - Administrator
+  note: Resume
+- from: In Progress
+  to: Completed
+  roles:
+  - Technician
+  note: Lead technician finishes work
+- from: Completed
+  to: Closed
+  roles:
+  - Facilities Officer
+  - Administrator
+  - system
+  note: 'System: requester acknowledgement (`POST /maintenance-requests/{id}/acknowledge`). Officer or Administrator:
+    manual close when the requester does not respond'
+- from: Completed
+  to: In Progress
+  roles:
+  - Facilities Officer
+  - Administrator
+  note: Reopen for rework; only before Closed. Closed is final
+x-role-matrix:
+  login: public
+  logout:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  getCurrentUser:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  listUsers:
+  - Administrator
+  createUser:
+  - Administrator
+  getUser:
+  - Administrator
+  updateUser:
+  - Administrator
+  listTechnicians:
+  - Facilities Officer
+  - Administrator
+  listRoles:
+  - Administrator
+  - Facilities Officer
+  listCategories:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  createCategory:
+  - Administrator
+  updateCategory:
+  - Administrator
+  deleteCategory:
+  - Administrator
+  listLocations:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  createLocation:
+  - Administrator
+  updateLocation:
+  - Administrator
+  deleteLocation:
+  - Administrator
+  getLookup:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  listMaintenanceRequests:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Administrator
+  createMaintenanceRequest:
+  - Requester
+  - Facilities Officer
+  - Administrator
+  listMyMaintenanceRequests:
+  - Requester
+  - Facilities Officer
+  - Administrator
+  getMaintenanceRequest:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Administrator
+  updateMaintenanceRequest:
+  - Requester
+  - Facilities Officer
+  - Administrator
+  deleteMaintenanceRequest:
+  - Requester
+  - Administrator
+  reviewMaintenanceRequest:
+  - Facilities Officer
+  - Administrator
+  acknowledgeMaintenanceRequest:
+  - Requester
+  listRequestAttachments:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Administrator
+  uploadRequestAttachments:
+  - Requester
+  - Facilities Officer
+  - Administrator
+  deleteRequestAttachment:
+  - Requester
+  - Facilities Officer
+  - Administrator
+  downloadRequestAttachment: public
+  listJobOrders:
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  createJobOrder:
+  - Facilities Officer
+  - Administrator
+  getJobOrder:
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  updateJobOrder:
+  - Facilities Officer
+  - Administrator
+  transitionJobOrder:
+  - Facilities Officer
+  - Technician
+  - Administrator
+  listJobOrderHistory:
+  - Facilities Officer
+  - Technician
+  - Administrator
+  listAssignments:
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  createAssignment:
+  - Facilities Officer
+  - Administrator
+  updateAssignment:
+  - Technician
+  - Facilities Officer
+  - Administrator
+  deleteAssignment:
+  - Facilities Officer
+  - Administrator
+  listWorkRecords:
+  - Facilities Officer
+  - Technician
+  - Administrator
+  createWorkRecord:
+  - Technician
+  listJobOrderMaterials:
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  createJobOrderMaterial:
+  - Technician
+  - Facilities Officer
+  listJobOrderAttachments:
+  - Facilities Officer
+  - Technician
+  - Administrator
+  uploadJobOrderAttachments:
+  - Technician
+  - Facilities Officer
+  deleteJobOrderAttachment:
+  - Technician
+  - Facilities Officer
+  - Administrator
+  downloadJobOrderAttachment: public
+  listMaterials:
+  - Inventory Staff
+  - Facilities Officer
+  - Technician
+  - Administrator
+  createMaterial:
+  - Inventory Staff
+  - Administrator
+  getMaterial:
+  - Inventory Staff
+  - Facilities Officer
+  - Technician
+  - Administrator
+  updateMaterial:
+  - Inventory Staff
+  - Administrator
+  adjustMaterialStock:
+  - Inventory Staff
+  - Administrator
+  listMaterialRequests:
+  - Inventory Staff
+  - Facilities Officer
+  - Technician
+  - Administrator
+  createMaterialRequest:
+  - Technician
+  - Facilities Officer
+  getMaterialRequest:
+  - Inventory Staff
+  - Facilities Officer
+  - Technician
+  - Administrator
+  fulfillMaterialRequest:
+  - Inventory Staff
+  rejectMaterialRequest:
+  - Inventory Staff
+  listNotifications:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  markNotificationRead:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  markAllNotificationsRead:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  getDashboardSummary:
+  - Requester
+  - Facilities Officer
+  - Technician
+  - Inventory Staff
+  - Administrator
+  getMaintenanceActivityReport:
+  - Facilities Officer
+  - Administrator
+  getRecurringIssuesReport:
+  - Facilities Officer
+  - Administrator

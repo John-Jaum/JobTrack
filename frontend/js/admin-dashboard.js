@@ -243,6 +243,8 @@
         }
 
         const errors = [];
+        setMetric(el.totalUsers, "-");
+        setMetric(el.totalMaterials, "-");
 
         // Keep the activity panel honest: v5 has no global audit feed.
         showActivityNotAvailable();
@@ -250,24 +252,15 @@
         try {
             // Load independently so one unavailable endpoint does not
             // prevent other dashboard cards from updating.
-            const results = await Promise.all([
+            await Promise.all([
                 runTask("Current user", loadCurrentUser, errors),
-                runTask("Registered users", loadUserCount, errors),
                 runTask("Job orders", loadJobOrderCount, errors),
-                runTask("Inventory materials", loadMaterialCount, errors),
                 runTask(
                     "Unread notifications",
                     loadUnreadNotifications,
                     errors
-                ),
-                runTask(
-                    "Dashboard summary",
-                    loadDashboardSummary,
-                    errors
                 )
             ]);
-
-            void results;
 
             if (errors.length > 0) {
                 showAlert(
