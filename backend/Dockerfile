@@ -3,6 +3,8 @@ FROM php:8.3-apache
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libzip-dev libonig-dev unzip \
     && docker-php-ext-install pdo_mysql mbstring bcmath zip \
+    && (getent group 1000 >/dev/null || groupadd -g 1000 render-secrets) \
+    && usermod -a -G 1000 www-data \
     && a2enmod rewrite \
     && rm -rf /var/lib/apt/lists/*
 
