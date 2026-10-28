@@ -24,12 +24,18 @@ return Application::configure(basePath: dirname(__DIR__))
 
 
 	    if ($status === 500) {
-			Log::error('JobTrack API exception', [
-				'exception' => get_class($e),
-				'message' => $e->getMessage(),
-				'path' => $request->path(),
-			]);
-		}
+            $caPath = env('MYSQL_ATTR_SSL_CA');
+
+            Log::error('JobTrack API exception', [
+                'exception' => get_class($e),
+                'message' => $e->getMessage(),
+                'path' => $request->path(),
+                'pdo_mysql_loaded' => extension_loaded('pdo_mysql'),
+                'ssl_ca_path_configured' => !empty($caPath),
+                'ssl_ca_file_exists' => $caPath ? file_exists($caPath) : false,
+                'ssl_ca_file_readable' => $caPath ? is_readable($caPath) : false,
+            ]);
+        }
 
 
 	    $body=['message'=>$status===500?'An unexpected server error occurred.':($e->getMessage() ?: 'The request could not be completed.'),'code'=>$code];
