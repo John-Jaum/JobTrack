@@ -8,3 +8,5 @@ node_modules
 storage/certs
 tests
 .phpunit.result.cache
+
+ca.pem
