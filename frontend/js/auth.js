@@ -1,7 +1,7 @@
 /*
  * JobTrack authentication
  * Contract source: jobtrack-openapi.yaml
- * POST http://localhost:8000/api/v1/auth/login
+ * POST https://jobtrack-fk7m.onrender.com/api/v1/auth/login
  *
  * Expected success response:
  * {
@@ -21,7 +21,7 @@
 (() => {
     "use strict";
 
-    const API_BASE_URL = "http://localhost:8000/api/v1";
+    const API_BASE_URL = "https://jobtrack-fk7m.onrender.com/api/v1";
     const AUTH_TOKEN_KEY = "jobtrack_token";
     const AUTH_USER_KEY = "jobtrack_user";
 
@@ -182,7 +182,7 @@
 
             showMessage(
                 isNetworkError
-                    ? "Could not connect to the JobTrack API. Check that the Laravel server is running at http://localhost:8000 and that CORS is configured."
+                    ? "Could not connect to the JobTrack API. Check that the Laravel server is available at https://jobtrack-fk7m.onrender.com and that CORS is configured."
                     : (error.message || "Unable to sign in. Please try again.")
             );
         } finally {

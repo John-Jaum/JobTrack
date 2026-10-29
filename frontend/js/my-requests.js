@@ -11,7 +11,7 @@
 (() => {
     "use strict";
 
-    const API_BASE_URL = "http://localhost:8000/api/v1";
+    const API_BASE_URL = "https://jobtrack-fk7m.onrender.com/api/v1";
     const AUTH_TOKEN_KEY = "jobtrack_token";
     const AUTH_USER_KEY = "jobtrack_user";
     const PAGE_SIZE = 15;

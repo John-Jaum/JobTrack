@@ -7,7 +7,7 @@ console.log("JobTrack frontend loaded successfully.");
    JobTrack API Configuration
 ================================= */
 
-const API_BASE_URL = "http://localhost:8000/api/v1";
+const API_BASE_URL = "https://jobtrack-fk7m.onrender.com/api/v1";
 
 // Must match the key used by your login JavaScript.
 const AUTH_TOKEN_KEY = "jobtrack_token";
