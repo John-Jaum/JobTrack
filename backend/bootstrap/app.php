@@ -34,6 +34,15 @@ return Application::configure(basePath: dirname(__DIR__))
                 'ssl_ca_path_configured' => !empty($caPath),
                 'ssl_ca_file_exists' => $caPath ? file_exists($caPath) : false,
                 'ssl_ca_file_readable' => $caPath ? is_readable($caPath) : false,
+                'process_uid' => function_exists('posix_geteuid')
+                    ? posix_geteuid()
+                    : null,
+                'process_groups' => function_exists('posix_getgroups')
+                    ? posix_getgroups()
+                    : null,
+                'ssl_ca_permissions' => $caPath && file_exists($caPath)
+                    ? substr(sprintf('%o', fileperms($caPath)), -4)
+                    : null,
             ]);
         }
 
