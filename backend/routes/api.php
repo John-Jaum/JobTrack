@@ -13,7 +13,10 @@ Route::prefix('v1')->group(function () {
 
   Route::get('/materials', [MaterialController::class, 'index']);
 
-  Route::get('/roles', [RoleController::class, 'index']); Route::get('/users', [UserController::class, 'index']);
+  Route::get('/roles', [RoleController::class, 'index']);
+
+  Route::apiResource('users', UserController::class)
+    ->only(['index', 'store', 'show', 'update']);
 
   Route::get('/notifications', [NotificationController::class, 'index']);
 
