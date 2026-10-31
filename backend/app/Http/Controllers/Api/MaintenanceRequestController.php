@@ -7,7 +7,83 @@ class MaintenanceRequestController extends Controller
  private function role(Request $r): string { return (string)$r->user()->role?->role_name; }
  private function base(Request $r) { $role=$this->role($r); $q=MaintenanceRequest::query()->with(['requester','location','category','status'])->withCount('attachments'); if($role==='Requester') $q->where('requester_id',$r->user()->user_id); elseif($role==='Technician') $q->whereHas('jobOrder.assignments',fn($a)=>$a->where('technician_id',$r->user()->user_id)->where('assignment_status','!=','Declined')); elseif($role==='Inventory Staff') abort(403); return $q; }
  private function shape($m): array { return ['request_id'=>$m->request_id,'reference'=>'MR-'.str_pad((string)$m->request_id,4,'0',STR_PAD_LEFT),'requester_id'=>$m->requester_id,'requester'=>$m->requester?['user_id'=>$m->requester->user_id,'full_name'=>$m->requester->full_name]:null,'location_id'=>$m->location_id,'location_label'=>$m->location?->name,'category_id'=>$m->category_id,'category_label'=>$m->category?->category_name,'status_id'=>$m->status_id,'status_label'=>$m->status?->status_name,'description'=>$m->description,'priority'=>$m->priority,'submitted_at'=>optional($m->submitted_at)->toISOString(),'created_at'=>optional($m->created_at)->toISOString(),'attachment_count'=>(int)$m->attachments_count]; }
- public function index(Request $r) { $data=$this->base($r); if($r->filled('status_id'))$data->where('status_id',$r->integer('status_id')); if($r->filled('q'))$data->where(fn($q)=>$q->where('description','like','%'.$r->string('q').'%')); $p=$data->orderByDesc('created_at')->orderByDesc('request_id')->paginate(min(100,max(1,$r->integer('per_page',15))))->withQueryString(); return response()->json(['data'=>$p->getCollection()->map(fn($m)=>$this->shape($m)),'meta'=>['current_page'=>$p->currentPage(),'per_page'=>$p->perPage(),'total'=>$p->total(),'last_page'=>$p->lastPage(),'from'=>$p->firstItem(),'to'=>$p->lastItem()]]); }
+ public function index(Request $r)
+ {
+    $data = $this->base($r);
+
+    // Filter by request status.
+    if ($r->filled('status_id')) {
+        $data->where('status_id', $r->integer('status_id'));
+    }
+
+    // Filter by priority.
+    if ($r->filled('priority')) {
+        $data->where('priority', $r->string('priority')->toString());
+    }
+
+    // Search across reference, requester, description,
+    // maintenance category, and location.
+    if ($r->filled('q')) {
+        $search = trim($r->string('q')->toString());
+
+        $data->where(function ($query) use ($search) {
+
+            // Search request description.
+            $query->where('description', 'like', "%{$search}%");
+
+            // Search requester's full name.
+            $query->orWhereHas('requester', function ($requesterQuery) use ($search) {
+                $requesterQuery->where(
+                    'full_name',
+                    'like',
+                    "%{$search}%"
+                );
+            });
+
+            // Search generated reference, e.g. MR-0001.
+            // Supports partial searches such as M, MR, MR-00, and MR-0001.
+            $query->orWhereRaw(
+                "CONCAT('MR-', LPAD(request_id, 4, '0')) LIKE ?",
+                ['%' . strtoupper($search) . '%']
+            );
+
+            // Search maintenance category name only.
+            $query->orWhereHas('category', function ($categoryQuery) use ($search) {
+                $categoryQuery->where('category_name', 'like', "%{$search}%");
+            });
+
+            // Search location fields.
+            $query->orWhereHas('location', function ($locationQuery) use ($search) {
+                $locationQuery->where('building_name', 'like', "%{$search}%")
+                    ->orWhere('floor', 'like', "%{$search}%")
+                    ->orWhere('room_number', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
+        });
+    }
+
+    $p = $data
+        ->orderByDesc('created_at')
+        ->orderByDesc('request_id')
+        ->paginate(
+            min(100, max(1, $r->integer('per_page', 15)))
+        )
+        ->withQueryString();
+
+    return response()->json([
+        'data' => $p->getCollection()->map(
+            fn ($m) => $this->shape($m)
+        ),
+        'meta' => [
+            'current_page' => $p->currentPage(),
+            'per_page' => $p->perPage(),
+            'total' => $p->total(),
+            'last_page' => $p->lastPage(),
+            'from' => $p->firstItem(),
+            'to' => $p->lastItem(),
+        ],
+    ]);
+ }
  public function myRequests(Request $r) { return $this->index($r); }
 
  public function store(Request $r)

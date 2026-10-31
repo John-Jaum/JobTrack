@@ -41,15 +41,17 @@
             return;
         }
 
-        // Show a useful page while the API requests are running.
+        // Remove any old static/mock rows immediately.
+        elements.requestsTableBody.replaceChildren();
+
+        // Show loading state.
         setLoading(true);
 
         await Promise.allSettled([
             loadCurrentUser(),
-            loadStatuses()
+            loadStatuses(),
+            loadRequests()
         ]);
-
-        await loadRequests();
     }
 
     function cacheElements() {
@@ -254,7 +256,7 @@
 
             statuses.forEach((status) => {
                 const id = status.id ?? status.status_id;
-                const name = status.name ?? status.status_name;
+                const name = status.label ?? status.name ?? status.status_name;
 
                 if (id == null || !name) return;
 
@@ -407,7 +409,8 @@
             "—";
 
         const priority = request.priority || "—";
-        const status = request.status?.status_name ??
+        const status = request.status_label ??
+            request.status?.status_name ??
             request.status?.name ??
             "Unknown";
         const submittedAt = formatDate(request.submitted_at);
@@ -831,6 +834,7 @@
 
     function getStatusName(request) {
         return String(
+            request?.status_label ??
             request?.status?.status_name ??
             request?.status?.name ??
             ""
