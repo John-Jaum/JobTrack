@@ -4,7 +4,7 @@
 
     // API paths are relative to the base URL configured in app.js.
     const REQUESTS_ENDPOINT = "/maintenance-requests";
-    const REQUEST_STATUSES_ENDPOINT = "/lookups/request_statuses";
+    const REQUEST_STATUSES_ENDPOINT = "/statuses";
     const REVIEW_ENDPOINT = (requestId) =>
         `/maintenance-requests/${encodeURIComponent(requestId)}/review`;
 
@@ -393,12 +393,19 @@
         const requestId = request.request_id;
         const reference = request.reference || `Request #${requestId}`;
         const requester = getRequesterName(request.requester);
-        const category = request.category?.name ??
+
+        const category = request.category_label ??
+            request.category?.name ??
             request.category?.category_name ??
+            request.category_name ??
             "—";
-        const location = request.location?.name ??
+
+        const location = request.location_label ??
+            request.location?.name ??
             request.location?.location_name ??
+            request.location_name ??
             "—";
+
         const priority = request.priority || "—";
         const status = request.status?.status_name ??
             request.status?.name ??

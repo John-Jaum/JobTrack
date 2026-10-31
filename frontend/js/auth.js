@@ -1,7 +1,7 @@
 /*
  * JobTrack authentication
  * Contract source: jobtrack-openapi.yaml
- * POST http://localhost:8000/api/v1/auth/login
+ * POST https://jobtrack-fk7m.onrender.com/api/v1/auth/login
  *
  * Expected success response:
  * {
@@ -21,14 +21,20 @@
 (() => {
     "use strict";
 
-    const API_BASE_URL = "http://localhost:8000/api/v1";
+    const API_BASE_URL = "https://jobtrack-fk7m.onrender.com/api/v1";
     const AUTH_TOKEN_KEY = "jobtrack_token";
     const AUTH_USER_KEY = "jobtrack_user";
 
     // Only the requester destination is confirmed by the supplied frontend files.
     // Add the other role destinations here once their actual page paths are known.
     const ROLE_DASHBOARD_PATHS = {
-        "Requester": "pages/requester/dashboard.html"
+        "Administrator": "pages/admin/admin-dashboard.html",
+        "Facilities Officer": "pages/facilities/facilities-dashboard.html",
+        "Facilities Staff": "pages/facilities/facilities-dashboard.html",
+        "Inventory Staff": "pages/inventory/inventory-dashboard.html",
+        "Inventory Officer": "pages/inventory/inventory-dashboard.html",
+        "Requester": "pages/requester/requester-dashboard.html",
+        "Technician": "pages/technician/technician-dashboard.html"
     };
 
     const form = document.getElementById("loginForm");
@@ -131,7 +137,7 @@
 
         const payload = await response.json();
         const authData = payload?.data;
-        const token = authData?.token;
+        const token = authData?.access_token;
         const user = authData?.user;
         const roleName = user?.role?.role_name;
 
@@ -176,7 +182,7 @@
 
             showMessage(
                 isNetworkError
-                    ? "Could not connect to the JobTrack API. Check that the Laravel server is running at http://localhost:8000 and that CORS is configured."
+                    ? "Could not connect to the JobTrack API. Check that the Laravel server is available at https://jobtrack-fk7m.onrender.com and that CORS is configured."
                     : (error.message || "Unable to sign in. Please try again.")
             );
         } finally {

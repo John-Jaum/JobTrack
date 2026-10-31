@@ -1,0 +1,3 @@
+<?php
+use Illuminate\Database\Migrations\Migration; use Illuminate\Database\Schema\Blueprint; use Illuminate\Support\Facades\Schema;
+return new class extends Migration { public function up(): void { Schema::create('request_attachments', function(Blueprint $t){ $t->id('attachment_id'); $t->foreignId('request_id')->constrained('maintenance_requests','request_id')->cascadeOnDelete(); $t->foreignId('uploaded_by')->constrained('users','user_id')->restrictOnDelete(); $t->string('file_path',500); $t->string('original_name',255); $t->string('mime_type',100); $t->unsignedBigInteger('size_bytes'); $t->timestamps(); $t->index(['request_id','created_at']); }); } public function down(): void { Schema::dropIfExists('request_attachments'); } };
