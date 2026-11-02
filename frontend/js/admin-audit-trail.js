@@ -272,21 +272,8 @@
         URL.revokeObjectURL(url);
     });
 
-    logoutBtn.addEventListener("click", async () => {
-        try {
-            if (typeof window.apiRequest === "function") {
-                await window.apiRequest("/auth/logout", {
-                    method: "POST"
-                });
-            }
-        } catch (error) {
-            // Clear the local session even if the server logout request fails.
-            console.error("Logout request failed:", error);
-        } finally {
-            localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem(USER_KEY);
-            window.location.assign("../../index.html");
-        }
+    logoutBtn.addEventListener("click", () => {
+        window.logoutUser();
     });
 
     // Use the same session keys as the other JobTrack pages.

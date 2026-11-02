@@ -24,7 +24,9 @@ document.addEventListener("DOMContentLoaded", () => {
         jobsLoading: document.getElementById(
             "technicianRecentJobsLoading"
         ),
-        jobsEmpty: document.getElementById("technicianRecentJobsEmpty"),
+        jobsEmpty: document.getElementById(
+            "technicianRecentJobsEmpty"
+        ),
         jobsTableWrapper: document.getElementById(
             "technicianRecentJobsTableWrapper"
         ),
@@ -43,30 +45,31 @@ document.addEventListener("DOMContentLoaded", () => {
         alertBox.className = "alert d-none";
     }
 
-    /*
-     * The API helper should return parsed JSON.
-     * Accept both { data: ... } and a direct object where appropriate.
-     */
     async function getApiData(path) {
         if (typeof window.apiRequest !== "function") {
             throw new Error(
-                "The shared API helper was not found. Check js/app.js."
+                "Shared API helper not found. Check js/app.js."
             );
         }
 
-        const response = await window.apiRequest(path);
-        return response?.data ?? response;
+        // Return the complete response, including pagination metadata.
+        return await window.apiRequest(path);
     }
 
     function setCount(element, value) {
-        element.textContent =
-            Number.isFinite(Number(value)) ? Number(value).toLocaleString() : "0";
+        if (!element) return;
+
+        const number = Number(value);
+        element.textContent = Number.isFinite(number)
+            ? number.toLocaleString()
+            : "0";
     }
 
     function formatDate(value) {
         if (!value) return "—";
 
         const date = new Date(value);
+
         if (Number.isNaN(date.getTime())) return "—";
 
         return date.toLocaleDateString(undefined, {
@@ -76,17 +79,26 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    function createCell(text) {
+    function createCell(value) {
         const cell = document.createElement("td");
-        cell.textContent = text ?? "—";
+        cell.textContent = value ?? "—";
         return cell;
     }
 
-    function createStatusBadge(status) {
+    function createBadge(value, classes) {
         const badge = document.createElement("span");
-        const normalized = String(status || "").toLowerCase();
+        const normalized = String(value || "").toLowerCase();
 
-        const colorClasses = {
+        badge.className =
+            `badge ${classes[normalized] || "bg-secondary"}`;
+
+        badge.textContent = value || "Unknown";
+
+        return badge;
+    }
+
+    function createStatusBadge(status) {
+        return createBadge(status, {
             approved: "bg-secondary",
             assigned: "bg-primary",
             "in progress": "bg-info text-dark",
@@ -94,27 +106,16 @@ document.addEventListener("DOMContentLoaded", () => {
             completed: "bg-success",
             closed: "bg-dark",
             pending: "bg-secondary"
-        };
-
-        badge.className = `badge ${colorClasses[normalized] || "bg-secondary"}`;
-        badge.textContent = status || "Unknown";
-        return badge;
+        });
     }
 
     function createPriorityBadge(priority) {
-        const badge = document.createElement("span");
-        const normalized = String(priority || "").toLowerCase();
-
-        const colorClasses = {
+        return createBadge(priority, {
             urgent: "bg-danger",
             high: "bg-warning text-dark",
             medium: "bg-info text-dark",
             low: "bg-secondary"
-        };
-
-        badge.className = `badge ${colorClasses[normalized] || "bg-secondary"}`;
-        badge.textContent = priority || "—";
-        return badge;
+        });
     }
 
     function updateUnreadCount(count) {
@@ -123,22 +124,30 @@ document.addEventListener("DOMContentLoaded", () => {
         [
             elements.unreadSidebar,
             elements.unreadQuickAction
-        ].forEach((element) => {
+        ].forEach(element => {
+            if (!element) return;
+
             element.textContent = String(unreadCount);
             element.classList.toggle("d-none", unreadCount === 0);
         });
     }
 
     async function loadCurrentUser() {
-        const user = await getApiData("/auth/me");
+        const response = await getApiData("/auth/me");
+        const user = response?.data ?? response;
 
-        if (user?.role?.role_name &&
-            user.role.role_name !== "Technician") {
-            showAlert(
-                "Your account does not have the Technician role. " +
-                "Please sign in with a technician account."
+        const roleName =
+            user?.role?.role_name ??
+            user?.role_name ??
+            user?.role;
+
+        if (
+            roleName &&
+            String(roleName).toLowerCase() !== "technician"
+        ) {
+            throw new Error(
+                "This account does not have the Technician role."
             );
-            return;
         }
 
         elements.technicianName.textContent =
@@ -146,27 +155,44 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function loadDashboardSummary() {
-        const summary = await getApiData("/dashboard/summary");
-        const technician = summary?.technician;
+        const response = await getApiData("/dashboard/summary");
+        const technician = response?.data?.technician;
 
         if (!technician) {
             throw new Error(
-                "The API response did not include the technician dashboard summary."
+                "The API did not return the Technician dashboard summary."
             );
         }
 
-        setCount(elements.assignedJobs, technician.assigned_jobs);
-        setCount(elements.awaitingAcceptance, technician.awaiting_acceptance);
-        setCount(elements.inProgress, technician.in_progress_jobs);
-        setCount(elements.completedThisMonth, technician.completed_this_month);
+        setCount(
+            elements.assignedJobs,
+            technician.assigned_jobs
+        );
+
+        setCount(
+            elements.awaitingAcceptance,
+            technician.awaiting_acceptance
+        );
+
+        setCount(
+            elements.inProgress,
+            technician.in_progress_jobs
+        );
+
+        setCount(
+            elements.completedThisMonth,
+            technician.completed_this_month
+        );
     }
 
     async function loadUnreadNotifications() {
-        const result = await getApiData(
+        const response = await getApiData(
             "/notifications?page=1&per_page=1"
         );
 
-        updateUnreadCount(result?.meta?.unread_count ?? 0);
+        updateUnreadCount(
+            response?.meta?.unread_count ?? 0
+        );
     }
 
     async function loadRecentJobOrders() {
@@ -176,15 +202,13 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.jobsTableBody.replaceChildren();
 
         try {
-            const result = await getApiData(
+            const response = await getApiData(
                 "/job-orders?mine=true&sort=-created_at&page=1&per_page=5"
             );
 
-            const jobs = Array.isArray(result?.data)
-                ? result.data
-                : Array.isArray(result)
-                    ? result
-                    : [];
+            const jobs = Array.isArray(response?.data)
+                ? response.data
+                : [];
 
             elements.jobsLoading.classList.add("d-none");
 
@@ -193,40 +217,60 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
 
-            jobs.forEach((job) => {
+            jobs.forEach(job => {
                 const row = document.createElement("tr");
 
                 row.appendChild(
-                    createCell(job.request_reference || `JO-${job.job_order_id}`)
+                    createCell(
+                        job.request_reference ||
+                        `JO-${job.job_order_id}`
+                    )
                 );
-                row.appendChild(createCell(job.category_label || "—"));
+
+                row.appendChild(
+                    createCell(job.category_label)
+                );
 
                 const priorityCell = document.createElement("td");
-                priorityCell.appendChild(createPriorityBadge(job.priority));
+                priorityCell.appendChild(
+                    createPriorityBadge(job.priority)
+                );
                 row.appendChild(priorityCell);
 
                 const statusCell = document.createElement("td");
-                statusCell.appendChild(createStatusBadge(job.status_label));
+                statusCell.appendChild(
+                    createStatusBadge(job.status_label)
+                );
                 row.appendChild(statusCell);
 
                 const technicians = Array.isArray(job.technicians)
                     ? job.technicians
-                        .map((technician) => technician.full_name)
+                        .map(technician => technician.full_name)
                         .filter(Boolean)
                         .join(", ")
                     : "";
 
-                row.appendChild(createCell(technicians || "—"));
-                row.appendChild(createCell(formatDate(job.created_at)));
+                row.appendChild(
+                    createCell(technicians || "—")
+                );
+
+                row.appendChild(
+                    createCell(job.created_at
+                        ? formatDate(job.created_at)
+                        : "—")
+                );
 
                 const actionCell = document.createElement("td");
                 const link = document.createElement("a");
 
-                link.className = "btn btn-sm btn-outline-primary";
+                link.className =
+                    "btn btn-sm btn-outline-primary";
+
                 link.href =
-                    `job-order-details.html?jobOrderId=${encodeURIComponent(
-                        job.job_order_id
-                    )}`;
+                    `job-order-details.html?jobOrderId=${
+                        encodeURIComponent(job.job_order_id)
+                    }`;
+
                 link.textContent = "View";
 
                 actionCell.appendChild(link);
@@ -236,6 +280,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             elements.jobsTableWrapper.classList.remove("d-none");
+
         } catch (error) {
             elements.jobsLoading.classList.add("d-none");
             throw error;
@@ -244,29 +289,52 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function loadDashboard() {
         hideAlert();
+
         refreshButton.disabled = true;
         refreshButton.textContent = "Refreshing...";
 
-        const results = await Promise.allSettled([
-            loadCurrentUser(),
-            loadDashboardSummary(),
-            loadRecentJobOrders(),
-            loadUnreadNotifications()
-        ]);
+        const tasks = [
+            {
+                name: "Profile",
+                run: loadCurrentUser
+            },
+            {
+                name: "Dashboard summary",
+                run: loadDashboardSummary
+            },
+            {
+                name: "Recent job orders",
+                run: loadRecentJobOrders
+            },
+            {
+                name: "Notifications",
+                run: loadUnreadNotifications
+            }
+        ];
 
-        const failedTasks = results.filter(
-            (result) => result.status === "rejected"
+        const results = await Promise.allSettled(
+            tasks.map(task => task.run())
         );
 
-        if (failedTasks.length > 0) {
-            console.error(
-                "Technician dashboard loading errors:",
-                failedTasks.map((result) => result.reason)
-            );
+        const failures = results
+            .map((result, index) => ({
+                result,
+                name: tasks[index].name
+            }))
+            .filter(item => item.result.status === "rejected");
+
+        if (failures.length > 0) {
+            failures.forEach(item => {
+                console.error(
+                    `${item.name} failed:`,
+                    item.result.reason
+                );
+            });
 
             showAlert(
-                "Some dashboard information could not be loaded. " +
-                "Check the backend/API connection and try refreshing."
+                `Unable to load: ${
+                    failures.map(item => item.name).join(", ")
+                }. Check your API connection and try refreshing.`
             );
         }
 
@@ -276,19 +344,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     refreshButton.addEventListener("click", loadDashboard);
 
-    const logoutButton = document.getElementById("logoutButton");
-
-    logoutButton.addEventListener("click", () => {
-        if (typeof window.logoutUser === "function") {
-            window.logoutUser();
-        } else if (typeof window.redirectToLogin === "function") {
-            window.redirectToLogin();
-        } else {
-            showAlert(
-                "The shared logout function was not found in js/app.js."
-            );
-        }
-    });
-
+    // The shared app.js handles links with id="logoutLink".
     loadDashboard();
 });

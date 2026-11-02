@@ -1,13 +1,11 @@
 console.log("JobTrack frontend loaded successfully.");
 
-
-            /* NEW CODE */
-
 /* =================================
    JobTrack API Configuration
 ================================= */
 
-const API_BASE_URL = "http://localhost:8000/api/v1";
+const API_BASE_URL = "https://jobtrack-fk7m.onrender.com/api/v1";
+//const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
 
 // Must match the key used by your login JavaScript.
 const AUTH_TOKEN_KEY = "jobtrack_token";
@@ -27,12 +25,21 @@ async function apiRequest(endpoint, options = {}) {
         `${API_BASE_URL}${endpoint}`,
         {
             ...options,
+
+            body: options.body &&
+                !(options.body instanceof FormData) &&
+                typeof options.body !== "string"
+                    ? JSON.stringify(options.body)
+                    : options.body,
+
             headers: {
                 Accept: "application/json",
+
                 // Let the browser set the multipart boundary for FormData.
                 ...(options.body && !(options.body instanceof FormData)
                     ? { "Content-Type": "application/json" }
                     : {}),
+
                 ...options.headers,
                 Authorization: `Bearer ${token}`
             }
@@ -40,15 +47,19 @@ async function apiRequest(endpoint, options = {}) {
     );
 
     if (response.status === 401) {
-        throw new Error(
+        const error = new Error(
             "Your session has expired. Please log in again."
         );
+        error.status = 401;
+        throw error;
     }
 
     if (response.status === 403) {
-        throw new Error(
+        const error = new Error(
             "You are not authorized to access this page."
         );
+        error.status = 403;
+        throw error;
     }
 
     if (!response.ok) {
@@ -63,11 +74,14 @@ async function apiRequest(endpoint, options = {}) {
             ? Object.values(errorPayload.errors).flat().filter(Boolean).join(" ")
             : "";
 
-        throw new Error(
+        const error = new Error(
             validationMessage ||
             errorPayload?.message ||
             `API request failed (HTTP ${response.status}).`
         );
+
+        error.status = response.status;
+        throw error;
     }
 
 
@@ -77,29 +91,6 @@ async function apiRequest(endpoint, options = {}) {
 }
 
             /* END OF NEW CODE */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            
 
 
 
@@ -124,38 +115,6 @@ function saveRequests(requests) {
         JSON.stringify(requests)
     );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
             /* NEW CODE */
@@ -359,24 +318,6 @@ function setupMaintenanceRequestForm() {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* =================================
    My Requests Page
 ================================= */
@@ -390,13 +331,16 @@ function setupMyRequestsPage() {
     const requests = getRequests();
 
     /* -----------------------------
-       Request Count
+        Request Count
     ----------------------------- */
     const requestCount =
         document.getElementById("requestCount");
-    requestCount.textContent =
-        requests.length +
-        (requests.length === 1 ? " request" : " requests");
+
+    if (requestCount) {
+        requestCount.textContent =
+            requests.length +
+            (requests.length === 1 ? " request" : " requests");
+    }
 
     /* -----------------------------
        Empty State
@@ -489,24 +433,6 @@ function formatDate(dateString) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
             /* NEW CODE */
 
 /* =================================
@@ -569,10 +495,10 @@ async function setupRequestDetailsPage() {
             request.reference ?? `MR-${request.request_id}`;
 
         categoryElement.textContent =
-            request.category?.name ?? "—";
+            request.category_label ?? "—";
 
         locationElement.textContent =
-            request.location?.name ?? "—";
+            request.location_label ?? "—";
 
         priorityElement.textContent =
             request.priority ?? "—";
@@ -593,7 +519,7 @@ async function setupRequestDetailsPage() {
             request.description ?? "—";
 
         const statusName =
-            request.status?.status_name ?? "Unknown";
+            request.status_label ?? "Unknown";
 
         const statusClasses = {
             "Pending": "text-bg-warning",
@@ -618,6 +544,11 @@ async function setupRequestDetailsPage() {
             attachmentsElement
         );
 
+        const timelineElement =
+            document.getElementById("requestTimeline");
+
+        renderRequestTimeline(request, timelineElement);
+
     } catch (error) {
         console.error("Request details API error:", error);
 
@@ -625,6 +556,89 @@ async function setupRequestDetailsPage() {
             error.message || "Unable to load this maintenance request."
         );
     }
+}
+
+function renderRequestTimeline(request, container) {
+    if (!container) return;
+
+    container.replaceChildren();
+
+    const jobOrder = request.job_order;
+
+    const milestones = [];
+
+    // Maintenance request submission.
+    if (request.submitted_at) {
+        milestones.push({
+            title: "Request Submitted",
+            description: "Your maintenance request was submitted.",
+            date: request.submitted_at
+        });
+    }
+
+    // Job Order approval.
+    if (jobOrder?.approved_at) {
+        milestones.push({
+            title: "Job Order Approved",
+            description: "Your request was approved by the Facilities Office.",
+            date: jobOrder.approved_at
+        });
+    }
+
+    // Actual Job Order status transitions.
+    (jobOrder?.status_history ?? []).forEach(history => {
+        milestones.push({
+            title: history.event || "Status Update",
+            description: [
+                history.from_status && history.to_status
+                    ? `${history.from_status} → ${history.to_status}`
+                    : null,
+                history.remarks || null,
+                history.changed_by
+                    ? `Updated by ${history.changed_by}`
+                    : null
+            ].filter(Boolean).join(" • "),
+            date: history.changed_at
+        });
+    });
+
+    if (!milestones.length) {
+        const message = document.createElement("p");
+        message.className = "text-muted mb-0";
+        message.textContent = "No progress history is available yet.";
+        container.appendChild(message);
+        return;
+    }
+
+    milestones.forEach((milestone, index) => {
+        const item = document.createElement("div");
+        item.className = "d-flex gap-3 mb-4";
+
+        const marker = document.createElement("div");
+        marker.className = "rounded-circle bg-primary flex-shrink-0 mt-1";
+        marker.style.width = "12px";
+        marker.style.height = "12px";
+
+        const content = document.createElement("div");
+
+        const title = document.createElement("h6");
+        title.className = "mb-1";
+        title.textContent = milestone.title;
+
+        const description = document.createElement("p");
+        description.className = "text-muted small mb-1";
+        description.textContent = milestone.description;
+
+        const date = document.createElement("small");
+        date.className = "text-muted";
+        date.textContent = milestone.date
+            ? new Date(milestone.date).toLocaleString()
+            : "Date unavailable";
+
+        content.append(title, description, date);
+        item.append(marker, content);
+        container.appendChild(item);
+    });
 }
 
 function renderRequestAttachments(attachments, container) {
@@ -691,6 +705,7 @@ function showRequestDetailsError(message) {
 }
 
 
+
 /* =================================
    Requester Dashboard - Live API
 ================================= */
@@ -698,16 +713,16 @@ function showRequestDetailsError(message) {
 async function setupRequesterDashboard() {
     const totalElement =
         document.getElementById("totalRequests");
-
-    // Do nothing if this isn't the dashboard page.
     if (!totalElement) return;
 
+    const inProgressElement =
+        document.getElementById("inProgressRequests");
+    const completedElement =
+        document.getElementById("completedRequests");
     const loadingElement =
         document.getElementById("dashboardLoading");
-
     const errorElement =
         document.getElementById("dashboardError");
-
     const tableBody =
         document.getElementById("recentRequestsTableBody");
 
@@ -721,68 +736,62 @@ async function setupRequesterDashboard() {
     }
 
     try {
-        // The contract provides counters and recent requests together.
-        const response =
-            await apiRequest("/dashboard/summary");
-
-        const summary = response.data?.requester;
-
-        if (!summary) {
-            throw new Error(
-                "The API response does not contain requester dashboard data."
-            );
-        }
-
-        // Update summary cards.
-        totalElement.textContent =
-            summary.total_requests ?? 0;
-
-        document.getElementById(
-            "inProgressRequests"
-        ).textContent =
-            summary.in_progress_requests ?? 0;
-
-        document.getElementById(
-            "completedRequests"
-        ).textContent =
-            summary.completed_requests ?? 0;
-
-        // Update recent requests table.
-        renderRecentRequests(
-            summary.recent_requests ?? [],
-            tableBody
+        const response = await apiRequest(
+            "/me/maintenance-requests?per_page=100&page=1"
         );
 
+        const requests = Array.isArray(response.data)
+            ? response.data
+            : [];
+
+        const total = response.meta?.total ?? requests.length;
+
+        const inProgress = requests.filter(
+            request => request.status_label === "In Progress"
+        ).length;
+
+        const completed = requests.filter(
+            request => ["Completed", "Closed"].includes(request.status_label)
+        ).length;
+
+        totalElement.textContent = total;
+
+        if (inProgressElement) {
+            inProgressElement.textContent = inProgress;
+        }
+
+        if (completedElement) {
+            completedElement.textContent = completed;
+        }
+
+        renderRecentRequests(requests, tableBody);
     } catch (error) {
-        console.error("Dashboard API error:", error);
+        console.error("Requester dashboard API error:", error);
 
         if (errorElement) {
-            errorElement.textContent = error.message;
+            errorElement.textContent =
+                "Unable to load dashboard data. Please refresh and try again.";
             errorElement.classList.remove("d-none");
         }
 
-        if (tableBody) {
-            tableBody.replaceChildren();
+        totalElement.textContent = "—";
 
-            const row = document.createElement("tr");
-            const cell = document.createElement("td");
-
-            cell.colSpan = 5;
-            cell.className =
-                "text-center text-muted py-4";
-            cell.textContent =
-                "Unable to load your requests.";
-
-            row.appendChild(cell);
-            tableBody.appendChild(row);
+        if (inProgressElement) {
+            inProgressElement.textContent = "—";
         }
 
+        if (completedElement) {
+            completedElement.textContent = "—";
+        }
+
+        renderRecentRequests([], tableBody);
     } finally {
         if (loadingElement) {
             loadingElement.classList.add("d-none");
         }
     }
 }
+
 
 
 /* =================================
@@ -834,19 +843,19 @@ function renderRecentRequests(requests, tableBody) {
             document.createElement("td");
 
         categoryCell.textContent =
-            request.category?.name ?? "—";
+            request.category_label ?? "—";
 
         const locationCell =
             document.createElement("td");
 
         locationCell.textContent =
-            request.location?.name ?? "—";
+            request.location_label ?? "—";
 
         const statusCell =
             document.createElement("td");
 
         const statusName =
-            request.status?.status_name ?? "Unknown";
+            request.status_label ?? "Unknown";
 
         const statusBadge =
             document.createElement("span");
@@ -870,9 +879,10 @@ function renderRecentRequests(requests, tableBody) {
 
         const dateCell = document.createElement("td");
 
-        dateCell.textContent = request.submitted_at
+        dateCell.textContent = (request.submitted_at || request.created_at)
             ? formatDate(
-                request.submitted_at.substring(0, 10)
+                (request.submitted_at || request.created_at)
+                .substring(0, 10)
             )
             : "—";
 
@@ -955,29 +965,7 @@ async function setupCurrentUser() {
     }
 }
 
-
-
             /* END OF NEW CODE */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /* =================================
@@ -1009,65 +997,125 @@ function setupSubmissionSuccessMessage() {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
             /* NEW CODE */
 
 /* =================================
-   Logout links
+   Centralized Logout Management
 ================================= */
 
+let logoutInProgress = false;
+
+window.logoutUser = async function () {
+    // Prevent multiple logout requests from simultaneous clicks.
+    if (logoutInProgress) return;
+
+    logoutInProgress = true;
+
+    try {
+        // Revoke this browser's authenticated token.
+        if (getAuthToken()) {
+            await apiRequest("/auth/logout", {
+                method: "POST"
+            });
+        }
+    } catch (error) {
+        console.warn(
+            "Logout request failed. Clearing local session anyway:",
+            error
+        );
+    } finally {
+        // Clear only this browser's session.
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem("jobtrack_user");
+
+        // Prevent returning to the protected page through browser history.
+        window.location.replace("../../index.html");
+    }
+};
+
+// =================================
+// Protected Page Authentication Guard
+// =================================
+
+let protectedPageCheckInProgress = false;
+
+async function validateProtectedPage() {
+    if (protectedPageCheckInProgress) return;
+
+    protectedPageCheckInProgress = true;
+
+    try {
+        const token = getAuthToken();
+
+        // No local authentication token.
+        if (!token) {
+            window.location.replace("../../index.html");
+            return;
+        }
+
+        // Verify that the token is still valid on the Laravel backend.
+        await apiRequest("/auth/me");
+
+    } catch (error) {
+        console.error(
+            "Protected page authentication failed:",
+            error
+        );
+
+        // Only clear the session when the backend explicitly
+        // reports that the authentication token is invalid.
+        if (error.status === 401) {
+            localStorage.removeItem(AUTH_TOKEN_KEY);
+            localStorage.removeItem("jobtrack_user");
+
+            window.location.replace("../../index.html");
+            return;
+        }
+
+        // A network failure, server error, or forbidden response
+        // should not automatically destroy the user's session.
+        console.warn(
+            "Session could not be verified. Local session preserved."
+        );
+
+    } finally {
+        protectedPageCheckInProgress = false;
+    }
+}
+
+// Check whenever the browser displays this page,
+// including browser Back/Forward navigation.
+window.addEventListener("pageshow", function () {
+    if (document.body.dataset.requiresAuth === "true") {
+        validateProtectedPage();
+    }
+});
+
+
+
 function setupLogoutLinks() {
+    // These links do not have their own page-specific logout handlers.
     document.querySelectorAll("#logoutLink").forEach(link => {
-        link.addEventListener("click", async event => {
+        link.addEventListener("click", event => {
             event.preventDefault();
-            try {
-                if (getAuthToken()) {
-                    await apiRequest("/auth/logout", { method: "POST" });
-                }
-            } catch (error) {
-                console.warn("Logout API request failed; clearing local session.", error);
-            } finally {
-                localStorage.removeItem(AUTH_TOKEN_KEY);
-                localStorage.removeItem("jobtrack_user");
-                window.location.href = "../../index.html";
-            }
+            window.logoutUser();
         });
     });
 }
-
             /* END OF NEW CODE */
-
-
-
-
-
-
 
 /* =================================
    Start Application
 ================================= */
 
+// Requester-only pages
+if (document.getElementById("requestCount")) {
+    setupMyRequestsPage();
+}
+
+
 setupMaintenanceRequestForm();
-setupMyRequestsPage();
+// setupMyRequestsPage();
 setupRequestDetailsPage();
 setupRequesterDashboard();
 setupSubmissionSuccessMessage();

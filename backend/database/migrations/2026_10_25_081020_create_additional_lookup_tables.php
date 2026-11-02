@@ -1,0 +1,3 @@
+<?php
+use Illuminate\Database\Migrations\Migration; use Illuminate\Database\Schema\Blueprint; use Illuminate\Support\Facades\Schema;
+return new class extends Migration { public function up(): void { Schema::create('material_request_statuses', function(Blueprint $t){$t->id('status_id');$t->string('status_name',50)->unique();$t->timestamps();}); Schema::create('notification_types', function(Blueprint $t){$t->id('type_id');$t->string('type_name',80)->unique();$t->timestamps();}); } public function down(): void { Schema::dropIfExists('notification_types'); Schema::dropIfExists('material_request_statuses'); } };

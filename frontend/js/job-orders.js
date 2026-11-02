@@ -20,7 +20,9 @@
         priority: "",
         searchTimer: null,
         loading: false,
-        detailsLoading: false
+        detailsLoading: false,
+        activeJobOrderId: null,
+        activeJobOrder: null
     };
 
     const elements = {};
@@ -76,6 +78,16 @@
             "detailCreatedAt",
             "detailCreatedBy",
             "detailTechniciansList",
+            "showAssignmentFormSection",
+            "showAssignmentFormButton",
+            "technicianAssignmentSection",
+            "technicianSelect",
+            "assignmentRole",
+            "assignmentNotes",
+            "assignTechnicianButton",
+            "technicianAssignmentFeedback",
+            "technicianAssignmentSuccess",
+            "dismissAssignmentSuccess",
             "jobOrderDetailsError",
             "logoutButton"
         ].forEach((id) => {
@@ -153,6 +165,52 @@
             }
         });
 
+        elements.showAssignmentFormButton?.addEventListener(
+            "click",
+            () => {
+                elements.showAssignmentFormSection.classList.add("d-none");
+                elements.technicianAssignmentSection.classList.remove("d-none");
+            }
+        );
+
+        elements.assignTechnicianButton?.addEventListener(
+            "click",
+            assignTechnician
+        );
+
+        elements.dismissAssignmentSuccess?.addEventListener(
+            "click",
+            () => {
+                elements.technicianAssignmentSuccess.classList.add("d-none");
+
+                const status = getStatusName(
+                    state.activeJobOrder
+                ).toLowerCase();
+
+                const jobOrderCanAcceptAssignments = [
+                    "approved",
+                    "assigned"
+                ].includes(status);
+
+                const availableTechnicians = Array.from(
+                    elements.technicianSelect.options
+                ).filter((option) => option.value);
+
+                const canAssign =
+                    jobOrderCanAcceptAssignments &&
+                    availableTechnicians.length > 0;
+
+                // Keep the assignment form hidden.
+                elements.technicianAssignmentSection?.classList.add("d-none");
+
+                // Show the button again only if another technician can be assigned.
+                elements.showAssignmentFormSection?.classList.toggle(
+                    "d-none",
+                    !canAssign
+                );
+            }
+        );
+
         elements.logoutButton?.addEventListener("click", logout);
     }
 
@@ -176,6 +234,129 @@
 
             handleApiError(error);
         }
+    }
+
+    // ---------------------------------------------------------
+    // Technician assignment
+    // ---------------------------------------------------------
+
+    async function loadTechnicians() {
+        const select = elements.technicianSelect;
+
+        if (!select) return;
+
+        select.replaceChildren();
+
+        const loadingOption = document.createElement("option");
+        loadingOption.value = "";
+        loadingOption.textContent = "Loading technicians...";
+        select.appendChild(loadingOption);
+
+        try {
+            const response = await apiRequest("/technicians");
+            const technicians = response?.data ?? [];
+
+            select.replaceChildren();
+
+            const defaultOption = document.createElement("option");
+            defaultOption.value = "";
+            defaultOption.textContent = "Select a technician";
+            select.appendChild(defaultOption);
+
+            technicians.forEach((technician) => {
+                const option = document.createElement("option");
+                option.value = technician.user_id;
+                option.textContent = technician.full_name;
+                select.appendChild(option);
+            });
+
+            if (technicians.length === 0) {
+                defaultOption.textContent = "No available technicians";
+            }
+        } catch (error) {
+            console.error("Unable to load technicians:", error);
+
+            select.replaceChildren();
+
+            const errorOption = document.createElement("option");
+            errorOption.value = "";
+            errorOption.textContent = "Unable to load technicians";
+            select.appendChild(errorOption);
+        }
+    }
+
+    async function assignTechnician() {
+        const jobOrderId = state.activeJobOrderId;
+        const technicianId = elements.technicianSelect?.value;
+        const assignmentRole = elements.assignmentRole?.value;
+        const notes = elements.assignmentNotes?.value.trim();
+
+        if (!jobOrderId) {
+            showAssignmentFeedback(
+                "danger",
+                "No Job Order is currently selected."
+            );
+            return;
+        }
+
+        if (!technicianId) {
+            showAssignmentFeedback(
+                "warning",
+                "Please select a technician."
+            );
+            return;
+        }
+
+        elements.assignTechnicianButton.disabled = true;
+        elements.assignTechnicianButton.textContent = "Assigning...";
+
+        try {
+            await apiRequest(
+                `/job-orders/${encodeURIComponent(jobOrderId)}/assignments`,
+                {
+                    method: "POST",
+                    body: {
+                        technician_id: Number(technicianId),
+                        assignment_role: assignmentRole,
+                        notes: notes || null
+                    }
+                }
+            );
+
+            elements.assignmentNotes.value = "";
+
+            // Refresh the Job Order details and assigned technician list.
+            await openJobOrderDetails(jobOrderId);
+            await loadJobOrders();
+
+            // Hide the button and assignment form while showing success.
+            elements.showAssignmentFormSection?.classList.add("d-none");
+            elements.technicianAssignmentSection?.classList.add("d-none");
+
+            // Display the success message.
+            elements.technicianAssignmentSuccess.classList.remove("d-none");
+
+        } catch (error) {
+            console.error("Unable to assign technician:", error);
+
+            showAssignmentFeedback(
+                "danger",
+                getErrorMessage(error, "Unable to assign technician.")
+            );
+        } finally {
+            elements.assignTechnicianButton.disabled = false;
+            elements.assignTechnicianButton.textContent =
+                "Assign Technician";
+        }
+    }
+
+    function showAssignmentFeedback(type, message) {
+        const feedback = elements.technicianAssignmentFeedback;
+
+        if (!feedback) return;
+
+        feedback.className = `alert alert-${type} mt-3`;
+        feedback.textContent = message;
     }
 
     // ---------------------------------------------------------
@@ -302,11 +483,15 @@
 
         const id = jobOrder.job_order_id;
         const requestReference =
-            jobOrder.request_reference || `Request #${jobOrder.request_id}`;
-        const location = jobOrder.location?.location_name ??
+            jobOrder.request?.reference ||
+            jobOrder.request_reference ||
+            `Request #${jobOrder.request_id}`;
+        const location = jobOrder.request?.location_label ??
+            jobOrder.location?.location_name ??
             jobOrder.location?.name ??
             "—";
-        const category = jobOrder.category?.category_name ??
+        const category = jobOrder.request?.category_label ??
+            jobOrder.category?.category_name ??
             jobOrder.category?.name ??
             "—";
         const technicians = Array.isArray(jobOrder.technicians)
@@ -430,6 +615,7 @@
     // ---------------------------------------------------------
 
     async function openJobOrderDetails(jobOrderId) {
+        state.activeJobOrderId = jobOrderId;
         if (!window.bootstrap?.Modal || !elements.jobOrderDetailsModal) {
             showAlert(
                 "danger",
@@ -454,6 +640,7 @@
         state.detailsLoading = true;
 
         try {
+            await loadTechnicians();
             const response = await apiRequest(
                 JOB_ORDER_DETAIL_ENDPOINT(jobOrderId)
             );
@@ -485,6 +672,7 @@
     }
 
     function renderJobOrderDetails(jobOrder) {
+        state.activeJobOrder = jobOrder;
         setText(
             "detailJobOrderId",
             jobOrder.job_order_id == null
@@ -503,19 +691,17 @@
 
         setText(
             "detailLocation",
-            jobOrder.location?.location_name ??
+            jobOrder.request?.location_label ??
+                jobOrder.location?.location_name ??
                 jobOrder.location?.name ??
-                jobOrder.request?.location?.location_name ??
-                jobOrder.request?.location?.name ??
                 "—"
         );
 
         setText(
             "detailCategory",
-            jobOrder.category?.category_name ??
+            jobOrder.request?.category_label ??
+                jobOrder.category?.category_name ??
                 jobOrder.category?.name ??
-                jobOrder.request?.category?.category_name ??
-                jobOrder.request?.category?.name ??
                 "—"
         );
 
@@ -528,6 +714,83 @@
         );
 
         renderTechnicians(jobOrder);
+        configureAssignmentForm(jobOrder);
+    }
+
+    function configureAssignmentForm(jobOrder) {
+        const assignments = Array.isArray(jobOrder.assignments)
+            ? jobOrder.assignments
+            : [];
+
+        const activeAssignments = assignments.filter((assignment) => {
+            const status = String(
+                assignment.assignment_status ?? assignment.status ?? ""
+            ).toLowerCase();
+
+            return status !== "declined";
+        });
+
+        const leadAssigned = activeAssignments.some((assignment) =>
+            String(assignment.assignment_role || "").toLowerCase() === "lead"
+        );
+
+        const assignedTechnicianIds = new Set(
+            activeAssignments.map((assignment) =>
+                String(assignment.technician_id)
+            )
+        );
+
+        // Remove technicians who are already assigned.
+        Array.from(elements.technicianSelect.options).forEach((option) => {
+            if (
+                option.value &&
+                assignedTechnicianIds.has(String(option.value))
+            ) {
+                option.remove();
+            }
+        });
+
+        // If a Lead already exists, only allow Support assignments.
+        if (elements.assignmentRole) {
+            const leadOption = Array.from(
+                elements.assignmentRole.options
+            ).find((option) => option.value === "Lead");
+
+            if (leadOption) {
+                leadOption.disabled = leadAssigned;
+            }
+
+            elements.assignmentRole.value = leadAssigned
+                ? "Support"
+                : "Lead";
+        }
+
+        // Only Approved and Assigned Job Orders accept new technicians.
+        const status = getStatusName(jobOrder).toLowerCase();
+
+        const jobOrderCanAcceptAssignments = [
+            "approved",
+            "assigned"
+        ].includes(status);
+
+        // Check whether unassigned technicians remain.
+        const availableTechnicians = Array.from(
+            elements.technicianSelect.options
+        ).filter((option) => option.value);
+
+        const canAssign =
+            jobOrderCanAcceptAssignments &&
+            availableTechnicians.length > 0;
+
+        // Keep the assignment form hidden until the button is clicked.
+        elements.technicianAssignmentSection?.classList.add("d-none");
+
+        // Show the button only when the Job Order can accept
+        // assignments and at least one technician is available.
+        elements.showAssignmentFormSection?.classList.toggle(
+            "d-none",
+            !canAssign
+        );
     }
 
     function renderTechnicians(jobOrder) {
@@ -544,7 +807,7 @@
                 .map((assignment) => ({
                     name: assignment.technician?.full_name,
                     role: assignment.assignment_role,
-                    status: assignment.status
+                    status: assignment.assignment_status ?? assignment.status
                 }))
                 .filter((technician) => technician.name);
         } else if (Array.isArray(jobOrder.technicians)) {
@@ -654,28 +917,9 @@
     // Logout
     // ---------------------------------------------------------
 
-    async function logout(event) {
-        event.preventDefault();
-
-        try {
-            await apiRequest("/auth/logout", { method: "POST" });
-        } catch (error) {
-            console.warn("Logout request failed:", error);
-        }
-
-        /*
-         * Prefer your shared logout function when available, so this
-         * page uses the same token keys and redirect behavior as app.js.
-         */
-        if (typeof window.logoutUser === "function") {
-            window.logoutUser();
-            return;
-        }
-
-        showAlert(
-            "warning",
-            "Logout API was called. If you remain signed in, use the shared logout function from app.js."
-        );
+    function logout(event) {
+        event?.preventDefault();
+        window.logoutUser();
     }
 
     // ---------------------------------------------------------
@@ -734,6 +978,7 @@
 
     function getStatusName(jobOrder) {
         return String(
+            jobOrder?.status_label ??
             jobOrder?.status?.status_name ??
             jobOrder?.status?.name ??
             ""

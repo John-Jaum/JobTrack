@@ -1,0 +1,12 @@
+
+.env
+.env.*
+!.env.example
+.git
+vendor
+node_modules
+storage/certs
+tests
+.phpunit.result.cache
+
+ca.pem

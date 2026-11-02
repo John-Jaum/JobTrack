@@ -417,18 +417,8 @@
         }
     }
 
-    async function logout() {
-        el.logout.disabled = true;
-
-        try {
-            await api("/auth/logout", { method: "POST" });
-        } catch (error) {
-            console.error("Logout request failed:", error);
-        } finally {
-            localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem("jobtrack_user");
-            window.location.assign("../../index.html");
-        }
+    function logout() {
+        window.logoutUser();
     }
 
     el.filterForm.addEventListener("submit", event => {

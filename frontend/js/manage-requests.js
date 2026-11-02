@@ -4,7 +4,7 @@
 
     // API paths are relative to the base URL configured in app.js.
     const REQUESTS_ENDPOINT = "/maintenance-requests";
-    const REQUEST_STATUSES_ENDPOINT = "/lookups/request_statuses";
+    const REQUEST_STATUSES_ENDPOINT = "/statuses";
     const REVIEW_ENDPOINT = (requestId) =>
         `/maintenance-requests/${encodeURIComponent(requestId)}/review`;
 
@@ -41,15 +41,17 @@
             return;
         }
 
-        // Show a useful page while the API requests are running.
+        // Remove any old static/mock rows immediately.
+        elements.requestsTableBody.replaceChildren();
+
+        // Show loading state.
         setLoading(true);
 
         await Promise.allSettled([
             loadCurrentUser(),
-            loadStatuses()
+            loadStatuses(),
+            loadRequests()
         ]);
-
-        await loadRequests();
     }
 
     function cacheElements() {
@@ -171,39 +173,9 @@
             }
         });
 
-        elements.logoutButton?.addEventListener("click", async (event) => {
+        logoutButton.addEventListener("click", event => {
             event.preventDefault();
-
-            if (typeof window.apiRequest !== "function") {
-                showAlert(
-                    "danger",
-                    "The shared API helper is unavailable. Check app.js."
-                );
-                return;
-            }
-
-            try {
-                await window.apiRequest("/auth/logout", {
-                    method: "POST"
-                });
-            } catch (error) {
-                // Continue with local logout even if the API call fails.
-                console.warn("Logout API request failed:", error);
-            }
-
-            // Use the shared app.js logout function if available.
-            if (typeof window.logoutUser === "function") {
-                window.logoutUser();
-                return;
-            }
-
-            // Fallback: clear the standard JobTrack auth keys.
-            localStorage.removeItem("jobtrack_token");
-            localStorage.removeItem("jobtrack_user");
-            localStorage.removeItem("auth_token");
-            localStorage.removeItem("auth_user");
-
-            window.location.assign("../../index.html");
+            window.logoutUser();
         });
     }
 
@@ -254,7 +226,7 @@
 
             statuses.forEach((status) => {
                 const id = status.id ?? status.status_id;
-                const name = status.name ?? status.status_name;
+                const name = status.label ?? status.name ?? status.status_name;
 
                 if (id == null || !name) return;
 
@@ -393,14 +365,22 @@
         const requestId = request.request_id;
         const reference = request.reference || `Request #${requestId}`;
         const requester = getRequesterName(request.requester);
-        const category = request.category?.name ??
+
+        const category = request.category_label ??
+            request.category?.name ??
             request.category?.category_name ??
+            request.category_name ??
             "—";
-        const location = request.location?.name ??
+
+        const location = request.location_label ??
+            request.location?.name ??
             request.location?.location_name ??
+            request.location_name ??
             "—";
+
         const priority = request.priority || "—";
-        const status = request.status?.status_name ??
+        const status = request.status_label ??
+            request.status?.status_name ??
             request.status?.name ??
             "Unknown";
         const submittedAt = formatDate(request.submitted_at);
@@ -824,6 +804,7 @@
 
     function getStatusName(request) {
         return String(
+            request?.status_label ??
             request?.status?.status_name ??
             request?.status?.name ??
             ""

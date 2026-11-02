@@ -52,14 +52,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getCategory(job) {
         return job.category_label ??
+            job.request?.category_label ??
             job.category?.category_name ??
             "—";
     }
 
     function getLocation(job) {
         return job.location_label ??
+            job.request?.location_label ??
             job.location?.location_name ??
-            job.location ??
             "—";
     }
 
@@ -119,11 +120,18 @@ document.addEventListener("DOMContentLoaded", () => {
     function matchesLocalFilters(job) {
         const search = $("jobOrderSearch").value.trim().toLowerCase();
         const selectedStatus = $("jobOrderStatusFilter").value;
+        const selectedPriority = $("jobOrderPriorityFilter").value;
+
+        const jobReference = job.request_reference ||
+            `JO-${job.job_order_id}`;
 
         const haystack = [
+            jobReference,
             job.job_order_id,
             job.request_id,
             job.request_reference,
+            job.request?.reference,
+            job.request?.request_id,
             getCategory(job),
             getLocation(job),
             job.priority,
@@ -131,10 +139,16 @@ document.addEventListener("DOMContentLoaded", () => {
         ].filter(Boolean).join(" ").toLowerCase();
 
         const matchesSearch = !search || haystack.includes(search);
+
         const matchesStatus =
             !selectedStatus || getStatus(job) === selectedStatus;
 
-        return matchesSearch && matchesStatus;
+        const matchesPriority =
+            !selectedPriority ||
+            String(job.priority || "").toLowerCase() ===
+                selectedPriority.toLowerCase();
+
+        return matchesSearch && matchesStatus && matchesPriority;
     }
 
     function renderSummary(jobs) {
@@ -146,7 +160,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // This counts job orders with status "Assigned", not assignment
         // responses. Assignment status is a separate field in the API.
-        $("awaitingAcceptanceCount").textContent = jobs.filter(
+        $("pageAwaitingResponseCount").textContent = jobs.filter(
             (job) => getStatus(job) === "Assigned"
         ).length.toLocaleString();
     }

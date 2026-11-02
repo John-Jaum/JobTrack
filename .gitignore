@@ -1,1 +1,7 @@
 .vs/
+.env
+/storage/certs/
+
+# Environment files and secrets
+.env.*
+!.env.example

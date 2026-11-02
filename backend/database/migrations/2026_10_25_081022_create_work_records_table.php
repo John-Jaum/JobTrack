@@ -1,0 +1,3 @@
+<?php
+use Illuminate\Database\Migrations\Migration; use Illuminate\Database\Schema\Blueprint; use Illuminate\Support\Facades\Schema;
+return new class extends Migration { public function up(): void { Schema::create('work_records', function(Blueprint $t){ $t->id('work_record_id'); $t->foreignId('job_order_id')->constrained('job_orders','job_order_id')->cascadeOnDelete(); $t->foreignId('technician_id')->constrained('users','user_id')->restrictOnDelete(); $t->text('work_description'); $t->decimal('hours_spent',6,2)->nullable(); $t->timestamp('worked_at')->useCurrent(); $t->timestamps(); $t->index(['job_order_id','worked_at']); }); } public function down(): void { Schema::dropIfExists('work_records'); } };

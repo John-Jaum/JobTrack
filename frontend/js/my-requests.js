@@ -11,7 +11,8 @@
 (() => {
     "use strict";
 
-    const API_BASE_URL = "http://localhost:8000/api/v1";
+    //const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
+    const API_BASE_URL = "https://jobtrack-fk7m.onrender.com/api/v1";
     const AUTH_TOKEN_KEY = "jobtrack_token";
     const AUTH_USER_KEY = "jobtrack_user";
     const PAGE_SIZE = 15;
@@ -172,12 +173,12 @@
             link.textContent = reference;
             idCell.appendChild(link);
 
-            const categoryCell = makeCell(request.category?.name);
-            const locationCell = makeCell(request.location?.name);
+            const categoryCell = makeCell(request.category_label ?? "—");
+            const locationCell = makeCell(request.location_label ?? "—");
             const priorityCell = makeCell(request.priority);
 
             const statusCell = document.createElement("td");
-            const statusName = request.status?.status_name || "Unknown";
+            const statusName = request.status_label || "Unknown";
             const badge = document.createElement("span");
             badge.className = `badge ${statusClass(statusName)}`;
             badge.textContent = statusName;
@@ -267,12 +268,12 @@
 
     async function loadStatusOptions() {
         try {
-            const response = await apiRequest("/lookups/request_statuses");
+            const response = await apiRequest("/statuses");
             const statuses = Array.isArray(response?.data) ? response.data : [];
 
             statuses.forEach(status => {
                 const id = status.id ?? status.status_id;
-                const name = status.name ?? status.status_name;
+                const name = status.label ?? status.name ?? status.status_name;
                 if (id == null || !name) return;
 
                 const option = document.createElement("option");
@@ -286,11 +287,18 @@
         }
     }
 
+
     async function loadCurrentUserName() {
+        // This page may not contain a currentUserName element.
+        // If it doesn't, there is nothing to update.
+        if (!userNameElement) return;
+
         const cachedUser = localStorage.getItem(AUTH_USER_KEY);
+
         if (cachedUser) {
             try {
                 const user = JSON.parse(cachedUser);
+
                 if (user.full_name) {
                     userNameElement.textContent = user.full_name;
                     return;
@@ -304,11 +312,15 @@
         try {
             const response = await apiRequest("/auth/me");
             const user = response?.data;
-            if (user?.full_name) userNameElement.textContent = user.full_name;
+
+            if (user?.full_name) {
+                userNameElement.textContent = user.full_name;
+            }
         } catch (error) {
             console.warn("Could not load current user profile:", error);
         }
     }
+
 
     async function loadRequests(page = 1) {
         if (currentRequestController) {
@@ -375,27 +387,9 @@
         loadRequests(1);
     });
 
-    logoutLink.addEventListener("click", async event => {
+    logoutLink.addEventListener("click", event => {
         event.preventDefault();
-
-        const token = getToken();
-        if (token) {
-            try {
-                await fetch(`${API_BASE_URL}/auth/logout`, {
-                    method: "POST",
-                    headers: {
-                        Accept: "application/json",
-                        Authorization: `Bearer ${token}`
-                    }
-                });
-            } catch (error) {
-                console.warn("Logout API request could not complete:", error);
-            }
-        }
-
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        localStorage.removeItem(AUTH_USER_KEY);
-        window.location.assign("../../index.html");
+        window.logoutUser();
     });
 
     // Start the page. Backend connectivity can be tested once Laravel is ready.
