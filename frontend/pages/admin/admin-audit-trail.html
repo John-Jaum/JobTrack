@@ -12,33 +12,46 @@
     >
     <link rel="stylesheet" href="../../css/style.css">
 </head>
-<body>
+<body data-requires-auth="true">
     <div class="d-flex min-vh-100">
         <aside class="sidebar p-3">
             <h4 class="mb-4">JobTrack</h4>
 
-            <nav class="nav flex-column gap-2">
+            <nav class="sidebar-nav">
                 <a class="nav-link" href="admin-dashboard.html">Dashboard</a>
-                <a class="nav-link" href="users.html">User Management</a>
-                <a class="nav-link" href="reports.html">System Reports</a>
-                <a class="nav-link active" href="audit-trail.html">
+                <a class="nav-link" href="admin-users.html">User Management</a>
+                <a class="nav-link" href="admin-reports.html">System Reports</a>
+                <a class="nav-link active" href="admin-audit-trail.html">
                     Audit Trail
                 </a>
-                <a class="nav-link" href="notifications.html">Notifications</a>
-                <button class="btn btn-outline-danger mt-3" id="logoutBtn">
-                    Log Out
-                </button>
+                <a class="nav-link" href="admin-notifications.html">Notifications</a>
+
             </nav>
+            <div class="sidebar-footer">
+            <button type="button" id="logoutButton"
+                    class="btn btn-outline-secondary btn-sm w-100 mt-3">
+                Log Out
+            </button>
+        </div>
         </aside>
 
-        <main class="flex-grow-1 p-3 p-md-4">
-            <div class="container-fluid">
-                <div class="mb-4">
-                    <h2>Audit Trail</h2>
-                    <p class="text-muted mb-0">
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <h5 class="mb-1">Audit Trail</h5>
+                    <small class="text-muted">
                         Review recorded status changes and events for a job order.
-                    </p>
+                    </small>
                 </div>
+                <div class="user-info text-end">
+                    <strong id="adminTopbarUserName">Administrator</strong>
+                    <span class="user-role">Administrator</span>
+                </div>
+            </header>
+
+
+            <div class="content">
+
 
                 <div class="alert alert-info" role="note">
                     This version displays the history of one job order at a time.
@@ -46,7 +59,8 @@
                 </div>
 
                 <section class="card mb-4">
-                    <div class="card-body">
+                    <div class="d-flex flex-wrap justify-content-between
+                            align-items-center gap-3">
                         <form id="auditSearchForm">
                             <div class="row g-3 align-items-end">
                                 <div class="col-md-6 col-lg-4">

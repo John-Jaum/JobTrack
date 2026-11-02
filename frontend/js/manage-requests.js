@@ -173,39 +173,9 @@
             }
         });
 
-        elements.logoutButton?.addEventListener("click", async (event) => {
+        logoutButton.addEventListener("click", event => {
             event.preventDefault();
-
-            if (typeof window.apiRequest !== "function") {
-                showAlert(
-                    "danger",
-                    "The shared API helper is unavailable. Check app.js."
-                );
-                return;
-            }
-
-            try {
-                await window.apiRequest("/auth/logout", {
-                    method: "POST"
-                });
-            } catch (error) {
-                // Continue with local logout even if the API call fails.
-                console.warn("Logout API request failed:", error);
-            }
-
-            // Use the shared app.js logout function if available.
-            if (typeof window.logoutUser === "function") {
-                window.logoutUser();
-                return;
-            }
-
-            // Fallback: clear the standard JobTrack auth keys.
-            localStorage.removeItem("jobtrack_token");
-            localStorage.removeItem("jobtrack_user");
-            localStorage.removeItem("auth_token");
-            localStorage.removeItem("auth_user");
-
-            window.location.assign("../../index.html");
+            window.logoutUser();
         });
     }
 

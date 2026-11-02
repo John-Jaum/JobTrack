@@ -178,8 +178,16 @@ document.addEventListener("DOMContentLoaded", () => {
             job.request_reference || `JO-${job.job_order_id}`
         );
         setText("detailRequestReference", job.request_reference);
-        setText("detailCategory", job.category_label);
-        setText("detailLocation", job.location_label);
+        setText(
+            "detailCategory",
+            job.category_label ?? job.request?.category_label
+        );
+
+        setText(
+            "detailLocation",
+            job.location_label ?? job.request?.location_label
+        );
+
         setText("detailCreatedBy", job.created_by?.full_name);
         setText("detailCreatedAt", formatDate(job.created_at));
         setText("detailApprovedAt", formatDate(job.approved_at));
@@ -291,14 +299,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (jobStatus === "Assigned") {
             $("startJobButton").classList.remove("d-none");
         } else if (jobStatus === "In Progress") {
-            $("putJobOnHoldButton").classList.remove("d-none");
             $("completeJobButton").classList.remove("d-none");
-        } else if (jobStatus === "On Hold") {
-            $("resumeJobButton").classList.remove("d-none");
         }
 
         const hasTransition =
-            ["Assigned", "In Progress", "On Hold"].includes(jobStatus);
+            ["Assigned", "In Progress"].includes(jobStatus);
 
         if (hasTransition) {
             transitionActions.classList.remove("d-none");
@@ -381,10 +386,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const currentStatus = state.myAssignment.assignment_status;
 
         const allowed =
-            (currentStatus === "Assigned" &&
-                ["Accepted", "Declined"].includes(assignmentStatus)) ||
-            (currentStatus === "Accepted" &&
-                assignmentStatus === "Completed");
+            currentStatus === "Assigned" &&
+            ["Accepted", "Declined"].includes(assignmentStatus);
 
         if (!allowed) {
             showAlert(
@@ -405,12 +408,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
             await apiRequest(
-                `/job-orders/${jobOrderId}/assignments/${state.user.user_id}`,
+                `/job-orders/${jobOrderId}/assignments/respond`,
                 {
-                    method: "PATCH",
+                    method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        assignment_status: assignmentStatus
+                        response: assignmentStatus === "Accepted"
+                            ? "accept"
+                            : "decline"
                     })
                 }
             );
@@ -475,26 +480,14 @@ document.addEventListener("DOMContentLoaded", () => {
         hideAlert();
 
         try {
-            const body = {
-                status_label: targetStatus
-            };
+            const endpoint =
+                targetStatus === "In Progress"
+                    ? `/job-orders/${jobOrderId}/start`
+                    : `/job-orders/${jobOrderId}/complete`;
 
-            const remarks = $("transitionRemarks").value.trim();
-
-            if (remarks) {
-                body.remarks = remarks;
-            }
-
-            await apiRequest(
-                `/job-orders/${jobOrderId}/transitions`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(body)
-                }
-            );
-
-            $("transitionRemarks").value = "";
+            await apiRequest(endpoint, {
+                method: "POST"
+            });
 
             showAlert(
                 `Job order status updated to ${targetStatus}.`,

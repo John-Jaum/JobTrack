@@ -1,7 +1,7 @@
 <?php
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller; use App\Models\MaintenanceRequest; use App\Models\RequestStatus; use App\Models\Notification; use Illuminate\Http\Request; use Illuminate\Support\Facades\DB; use App\Models\JobOrder; use App\Models\JobOrderStatus; use App\Models\User;
+use App\Http\Controllers\Controller; use App\Models\MaintenanceRequest; use App\Models\RequestStatus; use App\Models\Notification; use Illuminate\Http\Request; use Illuminate\Support\Facades\DB; use App\Models\JobOrder; use App\Models\JobOrderStatus; use App\Models\User; use App\Models\JobOrderStatusHistory;
 class MaintenanceRequestController extends Controller
 {
  private function role(Request $r): string { return (string)$r->user()->role?->role_name; }
@@ -174,7 +174,48 @@ class MaintenanceRequestController extends Controller
     ], 201);
  }
 
- public function show(Request $r, string $requestId) { $m=$this->base($r)->where('request_id',$requestId)->firstOrFail(); return response()->json(['data'=>$this->shape($m)]); }
+ public function show(Request $r, string $requestId)
+ {
+    $m = $this->base($r)
+        ->where('request_id', $requestId)
+        ->firstOrFail();
+
+    // Load the linked Job Order and its status history.
+    $m->load([
+        'jobOrder.status',
+        'jobOrder.statusHistory.fromStatus',
+        'jobOrder.statusHistory.toStatus',
+        'jobOrder.statusHistory.changedBy'
+    ]);
+
+    $data = $this->shape($m);
+
+    // Include Job Order details when one exists.
+    $data['job_order'] = $m->jobOrder ? [
+        'job_order_id' => $m->jobOrder->job_order_id,
+        'status_label' => $m->jobOrder->status?->status_name,
+        'approved_at' => optional($m->jobOrder->approved_at)->toISOString(),
+        'closed_at' => optional($m->jobOrder->closed_at)->toISOString(),
+
+        'status_history' => $m->jobOrder->statusHistory
+            ->map(function ($history) {
+                return [
+                    'history_id' => $history->history_id,
+                    'event' => $history->event,
+                    'from_status' => $history->fromStatus?->status_name,
+                    'to_status' => $history->toStatus?->status_name,
+                    'changed_by' => $history->changedBy?->full_name,
+                    'changed_at' => optional($history->changed_at)->toISOString(),
+                    'remarks' => $history->remarks
+                ];
+            })
+            ->values()
+    ] : null;
+
+    return response()->json([
+        'data' => $data
+    ]);
+ }
  public function update(Request $r,string $requestId) { $m=$this->base($r)->where('request_id',$requestId)->firstOrFail(); abort_unless(in_array($this->role($r),['Requester','Facilities Officer','Administrator'],true),403); if($this->role($r)==='Requester') abort_if($m->status?->status_name!=='Pending',409,'Only pending requests can be edited.'); $v=$r->validate(['location_id'=>'sometimes|integer|exists:locations,location_id','category_id'=>'sometimes|integer|exists:maintenance_categories,category_id','description'=>'sometimes|string|max:10000','priority'=>'sometimes|in:Low,Medium,High,Urgent']); $m->update($v); return response()->json(['data'=>$this->shape($m->fresh()->load(['requester','location','category','status'])->loadCount('attachments'))]); }
  public function destroy(Request $r,string $requestId) { abort_unless(in_array($this->role($r),['Requester','Administrator'],true),403); $m=$this->base($r)->where('request_id',$requestId)->firstOrFail(); abort_if($m->jobOrder()->exists(),409,'Requests with a job order cannot be deleted.'); $m->delete(); return response()->noContent(); }
 
@@ -294,8 +335,162 @@ class MaintenanceRequestController extends Controller
  }
 
 
+ public function acknowledge(Request $r, string $requestId)
+ {
+    abort_unless(
+        $this->role($r) === 'Requester',
+        403
+    );
+
+    $result = DB::transaction(function () use ($r, $requestId) {
+
+        // Retrieve the request owned by the authenticated Requester.
+        $m = MaintenanceRequest::where(
+            'requester_id',
+            $r->user()->user_id
+        )->where(
+            'request_id',
+            $requestId
+        )->lockForUpdate()->firstOrFail();
+
+        $m->load('status');
+
+        // Only completed requests can be acknowledged.
+        abort_unless(
+            $m->status?->status_name === 'Completed',
+            409,
+            'Only completed requests can be acknowledged.'
+        );
+
+        // Lock the linked Job Order.
+        $jobOrder = JobOrder::where(
+            'request_id',
+            $m->request_id
+        )->lockForUpdate()->first();
+
+        abort_unless(
+            $jobOrder,
+            409,
+            'No linked job order was found.'
+        );
+
+        $jobOrder->load('status');
+
+        // The Job Order must also be completed.
+        abort_unless(
+            $jobOrder->status?->status_name === 'Completed',
+            409,
+            'The linked job order must be completed before acknowledgement.'
+        );
+
+        // Retrieve Closed statuses.
+        $closedRequestStatusId = RequestStatus::where(
+            'status_name',
+            'Closed'
+        )->value('status_id');
+
+        $closedJobOrderStatusId = JobOrderStatus::where(
+            'status_name',
+            'Closed'
+        )->value('status_id');
+
+        abort_if(
+            !$closedRequestStatusId || !$closedJobOrderStatusId,
+            500,
+            'Required Closed status is missing.'
+        );
+
+        // Retrieve the dedicated notification type.
+        $notificationTypeId = DB::table('notification_types')
+            ->where('type_name', 'Requester Acknowledgement')
+            ->value('type_id');
+
+        abort_if(
+            !$notificationTypeId,
+            500,
+            'Requester Acknowledgement notification type is missing.'
+        );
+
+        // Preserve the previous Job Order status for history.
+        $previousJobOrderStatusId = $jobOrder->status_id;
+
+        // Record the acknowledgement timestamp.
+        $acknowledgedAt = now();
+
+        // Close the Job Order.
+        $jobOrder->update([
+            'status_id' => $closedJobOrderStatusId,
+            'closed_at' => $acknowledgedAt
+        ]);
+
+        // Close the Maintenance Request.
+        $m->update([
+            'status_id' => $closedRequestStatusId
+        ]);
+
+        // Record the Requester acknowledgement in history.
+        JobOrderStatusHistory::create([
+            'job_order_id' => $jobOrder->job_order_id,
+            'from_status_id' => $previousJobOrderStatusId,
+            'to_status_id' => $closedJobOrderStatusId,
+            'event' => 'Requester Acknowledgement',
+            'changed_by' => $r->user()->user_id,
+            'changed_at' => $acknowledgedAt,
+            'remarks' => 'Maintenance completion acknowledged by Requester.'
+        ]);
+
+        // Collect the Facilities Officer who created the Job Order.
+        $recipientIds = collect([
+            $jobOrder->created_by
+        ]);
+
+        // Include all assigned technicians except declined assignments.
+        $technicianIds = $jobOrder->assignments()
+            ->where('assignment_status', '!=', 'Declined')
+            ->pluck('technician_id');
+
+        $recipientIds = $recipientIds
+            ->merge($technicianIds)
+            ->filter()
+            ->unique()
+            ->values();
+
+        // Generate the Maintenance Request reference.
+        $reference = 'MR-' . str_pad(
+            (string) $m->request_id,
+            4,
+            '0',
+            STR_PAD_LEFT
+        );
+
+        // Notify each recipient.
+        foreach ($recipientIds as $recipientId) {
+            Notification::create([
+                'user_id' => $recipientId,
+                'job_order_id' => $jobOrder->job_order_id,
+                'notification_type_id' => $notificationTypeId,
+                'title' => 'Maintenance Request Acknowledged',
+                'message' => "The Requester has acknowledged the completed maintenance request {$reference}. Job Order #{$jobOrder->job_order_id} is now closed."
+            ]);
+        }
+
+        return [
+            'request' => $m->fresh('status'),
+            'job_order' => $jobOrder->fresh('status')
+        ];
+    });
+
+    return response()->json([
+        'message' => 'Maintenance request acknowledged and closed successfully.',
+        'data' => [
+            'request_id' => $result['request']->request_id,
+            'request_status' => $result['request']->status?->status_name,
+            'job_order_id' => $result['job_order']->job_order_id,
+            'job_order_status' => $result['job_order']->status?->status_name,
+            'closed_at' => $result['job_order']->closed_at
+        ]
+    ]);
+ }
 
 
-
- public function acknowledge(Request $r,string $requestId) { abort_unless($this->role($r)==='Requester',403); $m=MaintenanceRequest::with('status')->where('requester_id',$r->user()->user_id)->findOrFail($requestId); abort_if($m->status?->status_name!=='Completed',409,'Only completed requests can be acknowledged.'); return response()->json(['message'=>'Acknowledgement requires a linked completed job order.','code'=>'invalid_transition'],409); }
 }

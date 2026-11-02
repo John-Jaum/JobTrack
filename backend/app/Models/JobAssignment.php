@@ -1,2 +1,53 @@
 <?php
-namespace App\Models; use Illuminate\Database\Eloquent\Model; class JobAssignment extends Model { protected $primaryKey='assignment_id'; protected $fillable=['job_order_id','technician_id','assignment_role','assignment_status','assigned_at','responded_at','notes']; protected $casts=['assigned_at'=>'datetime','responded_at'=>'datetime']; public function jobOrder(){return $this->belongsTo(JobOrder::class,'job_order_id','job_order_id');} public function technician(){return $this->belongsTo(User::class,'technician_id','user_id');} }
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class JobAssignment extends Model
+{
+    protected $primaryKey = 'assignment_id';
+
+    protected $fillable = [
+        'job_order_id',
+        'technician_id',
+        'assigned_by',
+        'assignment_role',
+        'assignment_status',
+        'assigned_at',
+        'responded_at',
+        'notes'
+    ];
+
+    protected $casts = [
+        'assigned_at' => 'datetime',
+        'responded_at' => 'datetime'
+    ];
+
+    public function jobOrder()
+    {
+        return $this->belongsTo(
+            JobOrder::class,
+            'job_order_id',
+            'job_order_id'
+        );
+    }
+
+    public function technician()
+    {
+        return $this->belongsTo(
+            User::class,
+            'technician_id',
+            'user_id'
+        );
+    }
+
+    public function assignedBy()
+    {
+        return $this->belongsTo(
+            User::class,
+            'assigned_by',
+            'user_id'
+        );
+    }
+}

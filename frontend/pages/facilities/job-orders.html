@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="../../css/style.css">
 </head>
 
-<body>
+<body data-requires-auth="true">
     <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-header">
@@ -45,7 +45,7 @@
         </nav>
 
         <div class="sidebar-footer">
-            <a href="#" class="nav-link" id="logoutButton">
+            <a href="../../index.html" class="nav-link" id="logoutButton">
                 Logout
             </a>
         </div>
@@ -535,6 +535,92 @@
                             id="detailTechniciansList"
                             class="list-group mb-4"
                         ></ul>
+
+                        <!-- Show Technician Assignment Form -->
+                        <div id="showAssignmentFormSection" class="mb-3 d-none">
+                            <button
+                                type="button"
+                                id="showAssignmentFormButton"
+                                class="btn btn-outline-primary"
+                            >
+                                <i class="bi bi-person-plus me-2"></i>
+                                Add Support Technician
+                            </button>
+                        </div>
+
+                        <!-- Assign Technician -->
+                        <div id="technicianAssignmentSection" class="border rounded p-3 mb-4">
+                            <h6 class="mb-3">Assign a Technician</h6>
+
+                            <div class="mb-3">
+                                <label for="technicianSelect" class="form-label">
+                                    Select Technician
+                                </label>
+                                <select id="technicianSelect" class="form-select">
+                                    <option value="">Loading technicians...</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="assignmentRole" class="form-label">
+                                    Assignment Role
+                                </label>
+                                <select id="assignmentRole" class="form-select">
+                                    <option value="Lead">Lead Technician</option>
+                                    <option value="Support">Support Technician</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="assignmentNotes" class="form-label">
+                                    Assignment Notes (Optional)
+                                </label>
+                                <textarea
+                                    id="assignmentNotes"
+                                    class="form-control"
+                                    rows="2"
+                                    maxlength="255"
+                                    placeholder="Enter assignment instructions..."
+                                ></textarea>
+                            </div>
+
+                            <button
+                                type="button"
+                                id="assignTechnicianButton"
+                                class="btn btn-primary"
+                            >
+                                Assign Technician
+                            </button>
+
+                            <div
+                                id="technicianAssignmentFeedback"
+                                class="mt-3 d-none"
+                                role="alert"
+                            ></div>
+                        </div>
+
+                        <div
+                            id="technicianAssignmentSuccess"
+                            class="alert alert-success d-none mb-4"
+                            role="status"
+                        >
+                            <h5 class="alert-heading">
+                                <i class="bi bi-check-circle-fill me-2"></i>
+                                Technician successfully assigned!
+                            </h5>
+
+                            <p class="mb-3">
+                                The technician has been assigned to this Job Order.
+                            </p>
+
+                            <button
+                                type="button"
+                                id="dismissAssignmentSuccess"
+                                class="btn btn-success"
+                            >
+                                Done
+                            </button>
+                        </div>
 
                         <div
                             id="jobOrderDetailsError"

@@ -9,6 +9,17 @@ Route::prefix('v1')->group(function () {
   Route::get('/categories',[MaintenanceCategoryController::class,'index']); Route::get('/locations', [LocationController::class, 'index']); Route::get('/statuses',[RequestStatusController::class,'index']);
   Route::get('/maintenance-requests',[MaintenanceRequestController::class,'index']); Route::post('/maintenance-requests',[MaintenanceRequestController::class,'store']); Route::get('/me/maintenance-requests',[MaintenanceRequestController::class,'myRequests']);
   Route::get('/maintenance-requests/{requestId}',[MaintenanceRequestController::class,'show']); Route::patch('/maintenance-requests/{requestId}',[MaintenanceRequestController::class,'update']); Route::delete('/maintenance-requests/{requestId}',[MaintenanceRequestController::class,'destroy']); Route::post('/maintenance-requests/{requestId}/review',[MaintenanceRequestController::class,'review']); Route::post('/maintenance-requests/{requestId}/acknowledge',[MaintenanceRequestController::class,'acknowledge']);
+  Route::get('/job-orders/{jobOrderId}/assignments', [JobOrderController::class, 'assignments']);
+  Route::post('/job-orders/{jobOrderId}/assignments', [JobOrderController::class, 'assignTechnician']);
+  Route::post('/job-orders/{jobOrderId}/assignments/respond', [JobOrderController::class, 'respondToAssignment']);
+  Route::post('/job-orders/{jobOrderId}/start', [JobOrderController::class, 'startJob']);
+
+  Route::get('/job-orders/{jobOrderId}/work-records', [JobOrderController::class, 'workRecords']);
+
+  Route::post('/job-orders/{jobOrderId}/work-records', [JobOrderController::class, 'storeWorkRecord']);
+
+  Route::post('/job-orders/{jobOrderId}/complete', [JobOrderController::class, 'completeJob']);
+
   Route::apiResource('job-orders',JobOrderController::class)->only(['index','store','show','update']);
 
 
@@ -19,6 +30,8 @@ Route::prefix('v1')->group(function () {
 
   Route::apiResource('users', UserController::class)
     ->only(['index', 'store', 'show', 'update']);
+
+  Route::get('/technicians', [UserController::class, 'technicians']);
 
   Route::get('/notifications', [NotificationController::class, 'index']);
 

@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="../../css/style.css">
 </head>
 
-<body>
+<body data-requires-auth="true">
     <!-- ================================
          Sidebar
     ================================= -->
@@ -34,7 +34,7 @@
         </nav>
 
         <div class="sidebar-footer">
-            <a href="#" class="nav-link">Logout</a>
+            <a href="../../index.html" id="logoutLink" class="nav-link">Logout</a>
         </div>
     </aside>
 
@@ -108,6 +108,22 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Request Progress Timeline -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Request Progress</h5>
+                    </div>
+
+                    <div class="card-body">
+                        <div id="requestTimeline">
+                            <p class="text-muted mb-0">
+                                Loading request progress...
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
 
                 <!-- Description -->
                 <div class="card shadow-sm mb-4">

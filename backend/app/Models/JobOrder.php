@@ -49,6 +49,16 @@ class JobOrder extends Model
         );
     }
 
+    public function workRecords()
+    {
+        return $this->hasMany(
+            WorkRecord::class,
+            'job_order_id',
+            'job_order_id'
+        );
+    }
+
+
     // The user who created the job order.
     public function createdBy()
     {
@@ -58,4 +68,15 @@ class JobOrder extends Model
             'user_id'
         );
     }
+
+    public function statusHistory()
+    {
+        return $this->hasMany(
+            JobOrderStatusHistory::class,
+            'job_order_id',
+            'job_order_id'
+        )->orderBy('changed_at', 'asc');
+    }
+
+
 }

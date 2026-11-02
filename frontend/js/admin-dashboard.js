@@ -254,7 +254,9 @@
             // prevent other dashboard cards from updating.
             await Promise.all([
                 runTask("Current user", loadCurrentUser, errors),
+                runTask("Registered users", loadUserCount, errors),
                 runTask("Job orders", loadJobOrderCount, errors),
+                runTask("Inventory materials", loadMaterialCount, errors),
                 runTask(
                     "Unread notifications",
                     loadUnreadNotifications,
@@ -288,28 +290,8 @@
         }
     }
 
-    async function logout() {
-        if (el.logout) {
-            el.logout.disabled = true;
-        }
-
-        try {
-            if (typeof window.apiRequest === "function" &&
-                localStorage.getItem(AUTH_TOKEN_KEY)) {
-                await window.apiRequest("/auth/logout", {
-                    method: "POST"
-                });
-            }
-        } catch (error) {
-            // Clear the local session even if the server logout request
-            // fails, for example when the token has expired.
-            console.error("Logout request failed:", error);
-        } finally {
-            localStorage.removeItem(AUTH_TOKEN_KEY);
-            localStorage.removeItem("jobtrack_user");
-
-            window.location.assign("../../index.html");
-        }
+    function logout() {
+        window.logoutUser();
     }
 
     if (el.refresh) {

@@ -11,6 +11,7 @@
 (() => {
     "use strict";
 
+    //const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
     const API_BASE_URL = "https://jobtrack-fk7m.onrender.com/api/v1";
     const AUTH_TOKEN_KEY = "jobtrack_token";
     const AUTH_USER_KEY = "jobtrack_user";
@@ -386,27 +387,9 @@
         loadRequests(1);
     });
 
-    logoutLink.addEventListener("click", async event => {
+    logoutLink.addEventListener("click", event => {
         event.preventDefault();
-
-        const token = getToken();
-        if (token) {
-            try {
-                await fetch(`${API_BASE_URL}/auth/logout`, {
-                    method: "POST",
-                    headers: {
-                        Accept: "application/json",
-                        Authorization: `Bearer ${token}`
-                    }
-                });
-            } catch (error) {
-                console.warn("Logout API request could not complete:", error);
-            }
-        }
-
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        localStorage.removeItem(AUTH_USER_KEY);
-        window.location.assign("../../index.html");
+        window.logoutUser();
     });
 
     // Start the page. Backend connectivity can be tested once Laravel is ready.

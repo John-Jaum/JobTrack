@@ -19,11 +19,14 @@
   }
 
   function getStatusName(request) {
-    return request?.status?.status_name
-      ?? request?.status_name
-      ?? request?.request_status
-      ?? request?.status
-      ?? "Unknown";
+    return String(
+        request?.status_label ??
+        request?.status?.status_name ??
+        request?.status_name ??
+        request?.request_status ??
+        request?.status ??
+        "Unknown"
+      );
   }
 
   function getLocationName(request) {
@@ -303,7 +306,7 @@
     }
 
     const match = statusLookup.find((item) => {
-      const name = item.name ?? item.status_name;
+      const name = item.label ?? item.name ?? item.status_name;
 
       return normalize(name) === normalize(selectedName);
     });

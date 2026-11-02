@@ -197,4 +197,36 @@ class UserController extends Controller
                 ->makeHidden(['password_hash']),
         ]);
     }
+
+    /**
+     * List active technicians for job order assignments.
+     */
+    public function technicians(Request $request)
+    {
+        abort_unless(
+            in_array(
+                $request->user()?->role?->role_name,
+                ['Facilities Officer', 'Administrator'],
+                true
+            ),
+            403,
+            'You are not authorized to view the technician list.'
+        );
+
+        $technicians = User::query()
+            ->where('is_active', true)
+            ->whereHas('role', function ($query) {
+                $query->where('role_name', 'Technician');
+            })
+            ->select([
+                'user_id',
+                'full_name',
+            ])
+            ->orderBy('full_name')
+            ->get();
+
+        return response()->json([
+            'data' => $technicians,
+        ]);
+    }
 }
